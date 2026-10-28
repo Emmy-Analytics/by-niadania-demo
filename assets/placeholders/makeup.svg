@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1000" role="img" aria-label="Makeup placeholder">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F2ECE4"/><stop offset=".5" stop-color="#E6D6D8"/><stop offset="1" stop-color="#C9B4BA"/>
+    </linearGradient>
+    <linearGradient id="lips" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#B06E7A"/><stop offset="1" stop-color="#7C4A56"/>
+    </linearGradient>
+    <linearGradient id="lid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E3C2BE"/><stop offset="1" stop-color="#B78E92"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="1000" fill="url(#bg)"/>
+  <ellipse cx="400" cy="250" rx="340" ry="250" fill="#DCE8F0" opacity=".3"/>
+  <!-- abstract beauty editorial: closed eyes, lips, cheek glow -->
+  <g transform="translate(400 300)">
+    <path d="M-250 40 C -160 -40 160 -40 250 40" fill="none" stroke="#4A3840" stroke-width="9" stroke-linecap="round"/>
+    <path d="M-230 60 C -150 -10 150 -10 230 60" fill="none" stroke="#8A6E75" stroke-width="5" stroke-linecap="round" opacity=".6"/>
+    <ellipse cx="-140" cy="30" rx="70" ry="34" fill="url(#lid)" opacity=".85"/>
+    <ellipse cx="140" cy="30" rx="70" ry="34" fill="url(#lid)" opacity=".85"/>
+  </g>
+  <g transform="translate(400 620)">
+    <path d="M-170 0 C -110 -70 110 -70 170 0 C 110 90 -110 90 -170 0 Z" fill="url(#lips)"/>
+    <path d="M-170 0 C -60 -18 60 -18 170 0" fill="none" stroke="#5E3641" stroke-width="6" stroke-linecap="round" opacity=".7"/>
+    <ellipse cx="-60" cy="28" rx="34" ry="16" fill="#FBF6F1" opacity=".35"/>
+    <ellipse cx="70" cy="20" rx="20" ry="10" fill="#FBF6F1" opacity=".25"/>
+  </g>
+  <ellipse cx="240" cy="560" rx="90" ry="50" fill="#D9A3A8" opacity=".35"/>
+  <ellipse cx="570" cy="560" rx="90" ry="50" fill="#D9A3A8" opacity=".35"/>
+  <g fill="#70565D" opacity=".45"><circle cx="140" cy="860" r="22"/><circle cx="662" cy="850" r="34"/></g>
+</svg>

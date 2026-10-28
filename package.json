@@ -1,0 +1,16 @@
+{
+  "name": "project-5",
+  "version": "1.0.0",
+  "description": "Responsive static website concept for By.Niadania with editorial styling, Fraunces headline typography with improved line spacing and readability, motion, gallery filters, service price draft, and a booking request form that prepares a WhatsApp message.",
+  "main": "script.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "playwright": "^1.64.1"
+  }
+}

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4efe8">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png">
+  <meta name="description" content="By.Niadania service — published work from our portfolio.">
+  <title>Service — By.Niadania</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=DM+Sans:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <a class="brand" href="index.html" aria-label="By.Niadania home"><img src="assets/logo-by-niadania.jpg"
+        alt="Logo By.Niadania"><span>By.Niadania</span></a>
+    <div class="header-controls">
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button class="lang-btn active" data-lang="en" type="button">EN</button>
+        <button class="lang-btn" data-lang="id" type="button">ID</button>
+      </div>
+      <a class="nav-cta" href="index.html#booking" data-i18n="nav_book">Book an appointment</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="service-hero section-wrap">
+      <a class="service-back" href="index.html#services" data-i18n="svc_back">&larr; Back to services</a>
+      <div class="service-hero-photo" id="servicePhoto" role="img" aria-label="Service photo"></div>
+      <h1 id="serviceTitle">Service</h1>
+      <p id="serviceDesc"></p>
+      <div class="hero-actions">
+        <a class="button button-dark" id="serviceBook" href="index.html#booking" data-i18n="svc_book">Book this
+          service</a>
+        <a class="text-link" href="index.html#gallery" data-i18n="svc_portfolio">Full portfolio</a>
+      </div>
+    </section>
+
+    <section class="section-wrap" style="padding:20px 0 70px">
+      <div class="section-heading">
+        <h2 data-i18n-html="svc_works_title">Published <em>work.</em></h2>
+      </div>
+      <div class="service-gallery" id="serviceGrid">
+        <div class="gallery-loading" data-i18n="gallery_loading">Loading the gallery…</div>
+      </div>
+      <p class="gallery-empty" id="serviceEmpty" data-i18n="gallery_empty" hidden>This category doesn't have published
+        work yet. Explore the latest work on Instagram.</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-top">
+      <a class="footer-brand" href="index.html"><img src="assets/logo-by-niadania.jpg"
+          alt="Logo By.Niadania"><span>By.Niadania</span></a>
+      <p data-i18n="footer_tag">Beauty, in your own way.</p>
+      <a class="footer-book" href="index.html#booking" data-i18n="footer_book">Make an appointment</a>
+    </div>
+    <div class="footer-bottom">
+      <span>© <span id="year"></span> By.Niadania</span>
+      <span data-i18n="footer_loc">Jakarta Timur, Indonesia</span>
+      <a href="https://www.instagram.com/by.niadania/" target="_blank" rel="noopener">@by.niadania</a>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+  <script>
+    // Service page bootstrap: reads ?cat=, renders only that category's PUBLISHED work.
+    (function () {
+      const params = new URLSearchParams(location.search);
+      const cat = (params.get("cat") || "").toLowerCase();
+      const valid = ["nail-art", "eyelash", "brow", "makeup"];
+      if (!valid.includes(cat)) { location.replace("index.html#services"); return; }
+
+      const COPY = {
+        en: {
+          "nail-art": { title: "Nail <em>art.</em>", desc: "From soft & minimal to artful details — every set is designed around your own style." },
+          "eyelash": { title: "Eyelash <em>extensions.</em>", desc: "Little details that frame your look, tailored to your eye shape." },
+          "brow": { title: "Brow <em>styling.</em>", desc: "Brows shaped to balance your features, naturally." },
+          "makeup": { title: "Makeup <em>artistry.</em>", desc: "For the moments you want to remember — lamaran, wisuda, and every occasion." }
+        },
+        id: {
+          "nail-art": { title: "Nail <em>art.</em>", desc: "Dari soft & minimal sampai detail artistik — setiap set didesain sesuai gayamu." },
+          "eyelash": { title: "Extension <em>eyelash.</em>", desc: "Detail kecil yang membingkai penampilanmu, disesuaikan dengan bentuk mata." },
+          "brow": { title: "Styling <em>alis.</em>", desc: "Alis dibentuk menyeimbangkan wajahmu, secara natural." },
+          "makeup": { title: "Seni <em>makeup.</em>", desc: "Untuk momen yang ingin kamu kenang — lamaran, wisuda, dan setiap acara." }
+        }
+      };
+
+      const heroPhotos = { "nail-art": "assets/photos/nail.jpg", "eyelash": "assets/photos/eyelash.jpg", "brow": "assets/photos/brow.jpg", "makeup": "assets/photos/makeup2.jpg" };
+      const serviceSelectValue = { "nail-art": "Nail Art", "eyelash": "Eyelash", "brow": "Brow", "makeup": "Makeup" };
+
+      document.getElementById("servicePhoto").style.backgroundImage = `url('${heroPhotos[cat]}')`;
+      document.getElementById("serviceBook").addEventListener("click", () => {
+        // Preselect the matching service in the booking form on the main page.
+        try { sessionStorage.setItem("byniadania-service", serviceSelectValue[cat]); } catch (e) { }
+      });
+
+      const t = key => key; // inline-only: translations for this page live in COPY above
+      void t;
+
+      function renderService(lang) {
+        const copy = COPY[lang][cat];
+        document.getElementById("serviceTitle").innerHTML = copy.title;
+        document.getElementById("serviceDesc").textContent = copy.desc;
+      }
+      // Hook into the site's language switcher.
+      const origApply = window.applyLanguage;
+      document.querySelectorAll(".lang-btn").forEach(btn => {
+        btn.addEventListener("click", () => renderService(btn.dataset.lang));
+      });
+      let initialLang = "en";
+      try { initialLang = localStorage.getItem("byniadania-lang") || "en"; } catch (e) { }
+      renderService(initialLang);
+      document.querySelectorAll(".lang-btn").forEach(b => b.classList.toggle("active", b.dataset.lang === initialLang));
+
+      document.getElementById("year").textContent = new Date().getFullYear();
+
+      // Render this category's PUBLISHED portfolio items once data is loaded.
+      function renderGrid() {
+        const grid = document.getElementById("serviceGrid");
+        const empty = document.getElementById("serviceEmpty");
+        if (!grid) return;
+        if (!window.__portfolioReady) { setTimeout(renderGrid, 250); return; }
+        const items = (window.__portfolioItems || []).filter(i => i.category === cat);
+        grid.innerHTML = items.map(portfolioCard).join("");
+        empty.hidden = items.length > 0;
+        if (!items.length) grid.innerHTML = "";
+        bindGalleryItems();
+      }
+      renderGrid();
+      // Kick off the portfolio fetch ourselves (script.js skips it when #galleryGrid is absent).
+      if (typeof window.loadPortfolioRef === "function") window.loadPortfolioRef();
+    })();
+  </script>
+</body>
+
+</html>
