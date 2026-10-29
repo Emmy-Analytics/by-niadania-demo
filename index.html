@@ -164,14 +164,79 @@
       </div>
     </section>
 
-    <section class="testimonial-section section-wrap">
-      <div class="testimonial-art reveal"><div class="testimonial-image"></div></div>
-      <div class="testimonial-copy reveal">
+    <section class="testimonial-section section-wrap" id="reviews">
+      <div class="reviews-copy reveal">
         <h2 data-i18n-html="review_title">Your words,<br><em>your stories.</em></h2>
-        <p data-i18n="review_text">Find customer experiences and the latest work through By.Niadania's Instagram.</p>
-        <a class="button button-dark" href="https://www.instagram.com/by.niadania/" target="_blank" rel="noopener" data-i18n="review_cta">Explore Instagram</a>
-        <p class="small-note" data-i18n="review_note">Testimonials will be shown as quotes only after real reviews are selected and approved.</p>
+        <p data-i18n="review_text">Real experiences from By.Niadania customers. Every review is read and approved before it appears here.</p>
+        <div class="reviews-summary" id="reviewsSummary" hidden></div>
+        <div class="reviews-actions">
+          <button class="button button-dark" id="writeReviewBtn" type="button" data-i18n="review_write">Write a review</button>
+          <a class="text-link" href="https://www.instagram.com/by.niadania/" target="_blank" rel="noopener" data-i18n="review_cta">Explore Instagram</a>
+        </div>
       </div>
+      <div class="reviews-gallery reveal">
+        <div class="reviews-grid" id="reviewsGrid"></div>
+        <div class="reviews-empty" id="reviewsEmpty" hidden>
+          <p data-i18n="reviews_empty_title">No published reviews yet.</p>
+          <p class="small-note" data-i18n="reviews_empty_text">Be the first to share your story — your review will appear here once it's been approved.</p>
+        </div>
+      </div>
+      <dialog class="review-modal" id="reviewModal"></dialog>
+      <dialog class="review-form-modal" id="reviewFormModal">
+        <button class="dialog-close review-form-close" id="reviewFormClose" aria-label="Close"><span></span><span></span></button>
+        <h3 data-i18n="rf_title">Share your experience</h3>
+        <form id="reviewForm" novalidate>
+          <label>
+            <span data-i18n="rf_name">Name or nickname *</span>
+            <input type="text" id="rvName" maxlength="60" required>
+            <em class="rv-err" data-err-for="rvName" hidden></em>
+          </label>
+          <label>
+            <span data-i18n="rf_service">Service you used *</span>
+            <select id="rvService" required></select>
+            <em class="rv-err" data-err-for="rvService" hidden></em>
+          </label>
+          <label>
+            <span data-i18n="rf_rating">Rating *</span>
+            <div class="rv-stars" id="rvStars" role="radiogroup" aria-label="Rating 1 to 5">
+              <button type="button" data-star="1" aria-label="1 star">★</button>
+              <button type="button" data-star="2" aria-label="2 stars">★</button>
+              <button type="button" data-star="3" aria-label="3 stars">★</button>
+              <button type="button" data-star="4" aria-label="4 stars">★</button>
+              <button type="button" data-star="5" aria-label="5 stars">★</button>
+            </div>
+            <em class="rv-err" data-err-for="rvStars" hidden></em>
+          </label>
+          <label>
+            <span data-i18n="rf_text">Your review *</span>
+            <textarea id="rvText" rows="4" maxlength="1000" required></textarea>
+            <em class="rv-err" data-err-for="rvText" hidden></em>
+          </label>
+          <label>
+            <span data-i18n="rf_photo">Photo (optional — JPEG, PNG, WebP, max 5 MB)</span>
+            <input type="file" id="rvPhoto" accept="image/jpeg,image/png,image/webp">
+            <span class="rv-file-info" id="rvPhotoInfo"></span>
+            <span class="rv-preview" id="rvPhotoPreview" hidden></span>
+          </label>
+          <label>
+            <span data-i18n="rf_video">Video (optional — MP4, WebM, max 40 MB)</span>
+            <input type="file" id="rvVideo" accept="video/mp4,video/webm">
+            <span class="rv-file-info" id="rvVideoInfo"></span>
+            <span class="rv-preview" id="rvVideoPreview" hidden></span>
+          </label>
+          <label class="rv-consent">
+            <input type="checkbox" id="rvConsent" required>
+            <span data-i18n="rf_consent">I agree that my review text and media may be published on this website after review.</span>
+          </label>
+          <label class="rv-consent">
+            <input type="checkbox" id="rvRights" required>
+            <span data-i18n="rf_rights">I confirm I have the right to share the attached media.</span>
+          </label>
+          <p class="rv-note" data-i18n="rf_note">Reviews are checked before being shown. To request changes or removal later, just message By.Niadania on WhatsApp.</p>
+          <p class="rv-status" id="rvStatus" hidden></p>
+          <button class="button button-dark" id="rvSubmit" type="submit" data-i18n="rf_submit">Send review</button>
+        </form>
+      </dialog>
     </section>
 
     <section class="booking-rules section-wrap">
@@ -329,6 +394,7 @@
     <button class="text-link dialog-edit" id="editBooking" type="button" data-i18n="summary_edit">Back to edit</button>
   </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="reviews.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
