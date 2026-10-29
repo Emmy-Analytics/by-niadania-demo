@@ -56,14 +56,17 @@ const browser = await chromium.launch();
     const state = window.__cartTestMessage;
     return null;
   });
-  // capture the URL by intercepting window.open
+  // capture the URL by intercepting window.open (fill the form first)
   await page.evaluate(() => { window.__opened = []; window.open = (u) => { window.__opened.push(u); return null; }; });
+  await page.fill("#cartName", "Sarah");
+  await page.fill("#cartDate", "2026-11-05");
+  await page.fill("#cartTime", "14:30");
   await page.click("#cartCheckout");
   await page.waitForTimeout(300);
   results.waOpened = await page.evaluate(() => window.__opened.map(u => decodeURIComponent(u.split("text=")[1] || "")));
   results.cartStillFilled = await page.evaluate(() => JSON.parse(localStorage.getItem("byniadania-cart-v1") || "[]").length);
-  // remove item
-  await page.locator("[data-cart-remove]").first().click();
+  // remove item (items list scrolls internally now)
+  await page.evaluate(() => document.querySelector("[data-cart-remove]").click());
   await page.waitForTimeout(200);
   results.afterRemove = await page.locator("#cartItems .cart-item").count();
   // escape closes
