@@ -1746,7 +1746,10 @@ function makeCartFloatDraggable(el) {
       }, true);
       rowEl.appendChild(variantRow);
     } else {
-      rowEl.appendChild(btn);
+      const btnWrap = document.createElement("div");
+      btnWrap.className = "cart-btn-zone";
+      btnWrap.appendChild(btn);
+      rowEl.appendChild(btnWrap);
     }
   });
   applyCartButtonLanguage();
