@@ -31,7 +31,7 @@ em{font-style:italic}
 .brand img,.footer-brand img{width:44px;height:44px;object-fit:cover;border-radius:50%;mix-blend-mode:multiply}
 .header-controls{margin-left:auto;display:flex;align-items:center;gap:14px}
 .lang-switch{display:flex;border:1px solid var(--line);border-radius:100px;overflow:hidden}
-.lang-btn{background:none;border:0;padding:7px 15px;font-size:10px;letter-spacing:.1em;color:var(--muted);transition:.2s}
+.lang-btn{background:none;border:0;padding:7px 11px;font-size:10px;letter-spacing:.1em;color:var(--muted);transition:.2s}
 .lang-btn.active{background:var(--rosewood);color:#fbf8f3}
 .nav-links{display:flex;align-items:center;gap:26px;font-size:10px;letter-spacing:.1em;text-transform:uppercase}
 .nav-links>a:not(.nav-cta){position:relative}
@@ -446,11 +446,13 @@ input.invalid,select.invalid{border-color:#a05151}
 
 /* ================= Cart ================= */
 .cart-float{
-  position:fixed;right:18px;bottom:18px;z-index:45;width:56px;height:56px;
+  position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom, 0px));z-index:45;width:56px;height:56px;
   border-radius:50%;border:0;background:var(--ink);color:#fbf8f3;
   display:flex;align-items:center;justify-content:center;cursor:pointer;
-  box-shadow:0 10px 28px rgba(39,39,42,.28);transition:transform .2s,background .2s;
+  box-shadow:0 10px 28px rgba(39,39,42,.28);transition:background .2s;
+  touch-action:none;user-select:none;
 }
+.cart-float.is-dragging{cursor:grabbing;box-shadow:0 14px 34px rgba(39,39,42,.4);transition:none}
 .cart-float:hover{background:var(--rosewood);transform:translateY(-2px)}
 .cart-float-badge{
   position:absolute;top:-4px;right:-4px;min-width:22px;height:22px;padding:0 6px;
@@ -459,10 +461,11 @@ input.invalid,select.invalid{border-color:#a05151}
   border:2px solid var(--paper);
 }
 .cart-drawer{
-  width:min(420px,calc(100% - 32px));max-height:86vh;margin-left:auto;margin-right:14px;
+  width:min(420px,calc(100% - 32px));max-height:min(86vh,calc(100dvh - 32px));margin-left:auto;margin-right:14px;
   border:0;border-radius:var(--radius-lg);padding:28px 24px;background:var(--paper);
-  color:var(--ink);box-shadow:var(--shadow);overflow:auto;
+  color:var(--ink);box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column;
 }
+.cart-drawer .cart-items{overflow-y:auto;min-height:0;overscroll-behavior:contain}
 .cart-drawer::backdrop{background:rgba(23,23,25,.45);backdrop-filter:blur(3px)}
 .cart-drawer h2{font-size:26px;margin-bottom:18px;padding-right:40px}
 .cart-drawer .cart-close{position:absolute;top:16px;right:16px}
@@ -489,6 +492,18 @@ input.invalid,select.invalid{border-color:#a05151}
 .cart-note{margin:4px 4px 0;font-size:11px;color:var(--muted);font-style:italic}
 .cart-other{margin:10px 4px 0;font-size:11px;color:var(--muted);font-style:italic}
 .cart-actions{display:grid;gap:10px;margin-top:18px}
+.cart-form{border-top:1px solid var(--line);margin-top:16px;padding-top:16px;display:grid;gap:12px}
+.cart-form h3{font-size:15px;margin:0;font-weight:600}
+.cart-form label{display:grid;gap:6px;font-size:12px;color:var(--muted)}
+.cart-form input,.cart-form textarea{
+  border:1px solid var(--line);border-radius:12px;padding:11px 14px;background:#fff;
+  font:inherit;font-size:14px;color:var(--ink);min-height:44px;
+}
+.cart-form input:focus,.cart-form textarea:focus{outline:2px solid var(--rosewood);outline-offset:1px;border-color:var(--rosewood)}
+.cart-form input.invalid{border-color:#c0392b}
+.cart-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.cart-field-error{color:#c0392b;font-size:11px;font-style:normal}
+.cart-form-note{margin:0;font-size:11px;color:var(--muted);font-style:italic}
 .cart-actions .button{justify-content:center;width:100%}
 .cart-actions .text-link{justify-self:center;background:none;border:0}
 .cart-add-btn{min-height:40px;padding:9px 18px;font-size:10px;margin-top:10px}
@@ -499,8 +514,36 @@ input.invalid,select.invalid{border-color:#a05151}
   font-size:12px;color:var(--ink);max-width:180px;
 }
 @media(max-width:480px){
-  .cart-float{right:16px;bottom:16px}
   .cart-drawer{margin-inline:auto;padding:24px 18px}
+}
+@media(max-width:480px){
+  .cart-float{right:16px;bottom:calc(16px + env(safe-area-inset-bottom, 0px))}
+  .cart-form-grid{grid-template-columns:1fr}
+}
+
+@media(max-width:360px){
+  .lang-btn{padding:7px 8px}
+  .brand{font-size:20px;gap:8px}
+  .brand img{width:38px;height:38px}
+}
+
+/* ================= Consistent button system =================
+   Primary buttons: 44–48px tall, single radius & padding scale.
+   Keeps touch targets reachable without wasting mobile space. */
+.button,.button-dark,.button-outline,.nav-cta,.cart-add-btn,.choose-nail{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  min-height:46px;padding:11px 22px;
+  border-radius:100px;border:1px solid transparent;
+  font:inherit;font-size:14px;font-weight:600;line-height:1.2;
+  text-decoration:none;cursor:pointer;white-space:nowrap;max-width:100%;
+  transition:background .2s,color .2s,border-color .2s;
+}
+.cart-add-btn{min-height:44px;font-size:12px;padding:9px 18px}
+.price-row{flex-wrap:wrap}
+.price-row>strong{white-space:nowrap}
+@media(max-width:600px){
+  .price-row{display:flex;gap:10px}
+  .price-row>div{flex:1 1 auto;min-width:0}
 }
 
 /* ================= Reduced motion already covered globally above ================= */

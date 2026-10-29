@@ -228,6 +228,30 @@ const I18N = {
     cart_wa_variant: "Variant",
     cart_wa_price: "Price",
     cart_wa_details: "Name:\nPreferred date:\nPreferred time:",
+    cart_wa_name: "Name",
+    cart_wa_date: "Preferred date",
+    cart_wa_time: "Preferred time",
+    cart_wa_notes: "Notes",
+    cart_wa_confirm_note: "Schedule to be confirmed by By.Niadania.",
+    cart_form_title: "Your details",
+    cart_form_name: "Full name",
+    cart_form_name_ph: "e.g. Sarah", 
+    cart_form_date: "Preferred date",
+    cart_form_time: "Preferred time",
+    cart_form_notes: "Additional notes (optional)",
+    cart_form_err_name: "Please enter your name.",
+    cart_form_err_date: "Please choose a date.",
+    cart_form_err_time: "Please choose a time.",
+    cart_form_note: "Your preferred slot still needs confirmation from By.Niadania — nothing is booked yet.",
+    price_from: "From",
+    price_unconfirmed: "To be confirmed",
+    price_currency_note: "Prices are indicative and need final confirmation before publishing.",
+    choose_nail_title: "Choose your nail art",
+    choose_nail_intro: "Pick one of the designs below, then we'll chat on WhatsApp to confirm details.",
+    choose_nail_back: "← Back to overview",
+    book_step1: "1 · Choose design",
+    book_step2: "2 · Your details",
+    book_step3: "3 · Confirm on WhatsApp",
     cart_wa_closing: "Could you help check the availability for this schedule? Thank you!"
   },
   id: {
@@ -395,6 +419,30 @@ const I18N = {
     cart_wa_variant: "Varian",
     cart_wa_price: "Harga",
     cart_wa_details: "Nama:\nTanggal yang diinginkan:\nJam yang diinginkan:",
+    cart_wa_name: "Nama",
+    cart_wa_date: "Tanggal yang diinginkan",
+    cart_wa_time: "Jam yang diinginkan",
+    cart_wa_notes: "Catatan",
+    cart_wa_confirm_note: "Jadwal masih perlu dikonfirmasi oleh By.Niadania.",
+    cart_form_title: "Data kamu",
+    cart_form_name: "Nama lengkap",
+    cart_form_name_ph: "mis. Sarah",
+    cart_form_date: "Tanggal yang diinginkan",
+    cart_form_time: "Jam yang diinginkan",
+    cart_form_notes: "Catatan tambahan (opsional)",
+    cart_form_err_name: "Mohon isi nama kamu dulu ya.",
+    cart_form_err_date: "Mohon pilih tanggal dulu ya.",
+    cart_form_err_time: "Mohon pilih jam dulu ya.",
+    cart_form_note: "Jadwal yang kamu pilih tetap perlu dikonfirmasi oleh By.Niadania — belum ada booking yang tercatat.",
+    price_from: "Mulai",
+    price_unconfirmed: "Perlu konfirmasi",
+    price_currency_note: "Harga bersifat indikatif dan perlu konfirmasi akhir sebelum publikasi.",
+    choose_nail_title: "Pilih nail art kamu",
+    choose_nail_intro: "Pilih salah satu desain di bawah, lalu kita lanjut chat di WhatsApp untuk konfirmasi detail.",
+    choose_nail_back: "← Kembali ke ringkasan",
+    book_step1: "1 · Pilih desain",
+    book_step2: "2 · Data kamu",
+    book_step3: "3 · Konfirmasi via WhatsApp",
     cart_wa_closing: "Boleh dibantu cek ketersediaan jadwalnya? Terima kasih!"
   }
 };
@@ -434,12 +482,30 @@ function updateNailFields() {
 serviceSelect?.addEventListener("change", updateNailFields);
 
 // Service cards preselect the booking category
-document.querySelectorAll(".service-card[data-category]").forEach(card => {
-  card.addEventListener("click", () => {
-    serviceSelect.value = card.dataset.category;
-    updateNailFields();
+(function bindServiceCardsAndNailCta() {
+  const cards = document.querySelectorAll(".service-card[data-category]");
+  if (cards.length) {
+    cards.forEach(card => {
+      card.addEventListener("click", () => {
+        serviceSelect.value = card.dataset.category;
+        updateNailFields();
+      });
+    });
+  }
+  // "Tanya / reservasi nail art" CTA under the price list: opens WhatsApp with
+  // a nail-art-specific opening message. Kept as ONE delegated listener so
+  // re-renders never create duplicates.
+  document.addEventListener("click", e => {
+    const btn = e.target.closest(".choose-nail");
+    if (!btn) return;
+    e.preventDefault();
+    const msg = state.lang === "id"
+      ? "Halo By.Niadania! Aku mau tanya dan reservasi Nail Art. Boleh dibantu info desain, harga, dan jadwal yang tersedia?"
+      : "Hello By.Niadania! I'd like to ask about and book Nail Art. Could you help with designs, prices, and available slots?";
+    const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
   });
-});
+})();
 
 // ---------------- Language switcher ----------------
 function applyLanguage(lang) {
@@ -1121,6 +1187,51 @@ function parseIdr(value) {
   return clean ? parseInt(clean, 10) : null;
 }
 
+/**
+ * Single shared IDR formatter (pricelist, service cards, cart, WhatsApp message).
+ * Values from the Sheet are already full Rupiah amounts — never divide by 1000.
+ * Invalid / missing values never render as Rp0, NaN or undefined.
+ */
+const IDR_FMT = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
+function formatIDR(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return IDR_FMT.format(n).replace(/\s/g, ""); // "Rp150.000" (Intl may insert NBSP)
+}
+
+/** Parse brochure price text like "Rp150.000", "Rp100K / 150K", "Rp3–35K", "Rp125K+". */
+function parseBrochurePrice(text) {
+  const raw = String(text || "");
+  const hasK = /K\b/i.test(raw);
+  const nums = raw.split(/[–\-/]/)
+    .map(p => {
+      const clean = p.replace(/[^\d]/g, "");
+      if (!clean) return null;
+      let n = parseInt(clean, 10);
+      if (hasK) n *= 1000;
+      return n;
+    })
+    .filter(n => n != null);
+  if (!nums.length) return null;
+  if (nums.length >= 2) return { min: Math.min(...nums), max: Math.max(...nums) };
+  return /\+/.test(raw) ? { min: nums[0] } : { price: nums[0] };
+}
+
+/** Display rule: exact -> "Rp150.000", range -> "Rp150.000–Rp250.000", min-only -> "Mulai Rp150.000", else "Perlu konfirmasi". */
+function displayPrice(price) {
+  if (!price) return t("price_unconfirmed");
+  if (price.min != null && price.max != null) {
+    const lo = formatIDR(price.min), hi = formatIDR(price.max);
+    return lo && hi ? `${lo}–${hi}` : t("price_unconfirmed");
+  }
+  if (price.min != null) {
+    const lo = formatIDR(price.min);
+    return lo ? `${t("price_from")} ${lo}` : t("price_unconfirmed");
+  }
+  const v = formatIDR(price.price);
+  return v || t("price_unconfirmed");
+}
+
 function normalizePriceKey(name) {
   return String(name || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -1195,6 +1306,22 @@ document.querySelectorAll('a[href="#booking"]').forEach(link => {
     if (link.dataset.noBookingTransition === "1") return;
     event.preventDefault();
     focusBooking(true);
+  });
+});
+
+// Brand click: on subpages go to the real homepage; on the homepage scroll to top.
+// Uses a resolved path (not just "#top") so it works from service.html too.
+document.querySelectorAll('a.brand[href="index.html"], a.brand[href="#top"], a.brand[href="index.html#top"], a.footer-brand[href="index.html"], a.footer-brand[href="#top"]').forEach(brandLink => {
+  brandLink.addEventListener("click", event => {
+    const onHome = location.pathname.endsWith("/") || location.pathname.toLowerCase().endsWith("index.html");
+    if (!onHome) {
+      // Explicit homepage URL relative to the current directory — works on any host.
+      event.preventDefault();
+      location.href = new URL("index.html", location.href).href;
+      return;
+    }
+    event.preventDefault();
+    window.scrollTo({ top: 0, behavior: reducedMotion ? "auto" : "smooth" });
   });
 });
 
@@ -1278,7 +1405,7 @@ function parseIdrToNumber(text) {
 }
 
 function formatRupiah(number) {
-  return `Rp${number.toLocaleString("id-ID")}`;
+  return formatIDR(number) || t("cart_confirm");
 }
 
 /** Item price status: exact / range / confirm. Never shows Rp0, NaN, or undefined. */
@@ -1300,15 +1427,18 @@ function cartSubtotal() {
   return { total, allConfirmed };
 }
 
+function priceTextFor(p) {
+  if (p.type === "exact") return formatRupiah(p.value);
+  if (p.type === "range") return `${t("cart_range")} ${formatRupiah(p.min)}`;
+  return t("cart_confirm");
+}
 function buildCartUI() {
   const has = cartState.length > 0;
   const cartBadge = document.querySelector("#cartBadge");
   const floatBtn = document.querySelector("#cartFloat");
   const items = cartState.length ? cartState.map(it => {
     const p = cartItemPrice(it);
-    const priceText = p.type === "exact" ? formatRupiah(p.value)
-      : p.type === "range" ? `${t("cart_range")} ${formatRupiah(p.min)}`
-      : t("cart_confirm");
+    const priceText = priceTextFor(p);
     return `<li class="cart-item">
       <div class="cart-item-copy">
         <strong>${escapeHtml(it.name)}</strong>
@@ -1358,21 +1488,27 @@ function closeCartDrawer() {
   document.body.classList.remove("no-scroll");
 }
 
+function priceTextFor(p) {
+  if (p.type === "exact") return formatRupiah(p.value);
+  if (p.type === "range") return `${t("cart_range")} ${formatRupiah(p.min)}`;
+  return t("cart_confirm");
+}
 function cartWaMessage() {
   const lines = [t("cart_wa_greeting"), ""];
   cartState.forEach((it, i) => {
-    const p = cartItemPrice(it);
-    const priceText = p.type === "exact" ? formatRupiah(p.value)
-      : p.type === "range" ? `${t("cart_range")} ${formatRupiah(p.min)}`
-      : t("cart_confirm");
     lines.push(`${i + 1}. ${it.name}`);
     if (it.variant) lines.push(`   ${t("cart_wa_variant")}: ${it.variant}`);
-    lines.push(`   ${t("cart_wa_price")}: ${priceText}`);
+    lines.push(`   ${t("cart_wa_price")}: ${priceTextFor(cartItemPrice(it))}`);
   });
   const sub = cartSubtotal();
   if (sub.total > 0) lines.push("", `${t("cart_subtotal")}: ${formatRupiah(sub.total)}`);
   if (!sub.allConfirmed) lines.push(t("cart_note"));
-  lines.push("", t("cart_wa_details"), "", t("cart_wa_closing"));
+  const cust = window.__cartCustomer || {};
+  if (cust.name) lines.push("", `${t("cart_wa_name")}: ${cust.name}`, `${t("cart_wa_date")}: ${cust.date || "-"}`, `${t("cart_wa_time")}: ${cust.time || "-"}`);
+  else lines.push("", t("cart_wa_details"));
+  if (cust.notes) lines.push(`${t("cart_wa_notes")}: ${cust.notes}`);
+  if (!cust.name) lines.push("", t("cart_wa_confirm_note"));
+  lines.push("", t("cart_wa_closing"));
   return lines.join("\n");
 }
 
@@ -1386,8 +1522,12 @@ function initCartUI() {
   floatBtn.hidden = cartState.length === 0;
   floatBtn.innerHTML = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 4h2l2.4 12.2a2 2 0 0 0 2 1.8h7.7a2 2 0 0 0 2-1.6L21 8H6"/><circle cx="10" cy="21" r="1.4"/><circle cx="18" cy="21" r="1.4"/></svg>
     <span class="cart-float-badge" id="cartBadge" hidden>${cartCount()}</span>`;
-  floatBtn.addEventListener("click", openCartDrawer);
+  floatBtn.addEventListener("click", () => {
+    if (window.__cartDragMoved) { window.__cartDragMoved = false; return; }
+    openCartDrawer();
+  });
   document.body.appendChild(floatBtn);
+  makeCartFloatDraggable(floatBtn);
 
   const drawer = document.createElement("dialog");
   drawer.id = "cartDrawer";
@@ -1396,6 +1536,31 @@ function initCartUI() {
     <button class="dialog-close cart-close" id="cartClose" aria-label="${t("lightbox_close")}"><span></span><span></span></button>
     <h2>${escapeHtml(t("cart_title"))}</h2>
     <ul class="cart-items" id="cartItems"></ul>
+    <form class="cart-form" id="cartForm" novalidate>
+      <h3>${escapeHtml(t("cart_form_title"))}</h3>
+      <label>
+        <span>${escapeHtml(t("cart_form_name"))} *</span>
+        <input type="text" id="cartName" name="cartName" autocomplete="name" placeholder="${escapeHtml(t("cart_form_name_ph"))}" required>
+        <em class="cart-field-error" data-err-for="cartName" hidden></em>
+      </label>
+      <div class="cart-form-grid">
+        <label>
+          <span>${escapeHtml(t("cart_form_date"))} *</span>
+          <input type="date" id="cartDate" name="cartDate" required>
+          <em class="cart-field-error" data-err-for="cartDate" hidden></em>
+        </label>
+        <label>
+          <span>${escapeHtml(t("cart_form_time"))} *</span>
+          <input type="time" id="cartTime" name="cartTime" required>
+          <em class="cart-field-error" data-err-for="cartTime" hidden></em>
+        </label>
+      </div>
+      <label>
+        <span>${escapeHtml(t("cart_form_notes"))}</span>
+        <textarea id="cartNotes" name="cartNotes" rows="2"></textarea>
+      </label>
+      <p class="cart-form-note">${escapeHtml(t("cart_form_note"))}</p>
+    </form>
     <div class="cart-actions">
       <button class="button button-dark" id="cartCheckout" type="button">${escapeHtml(t("cart_checkout"))}</button>
       <button class="text-link" id="cartClear" type="button">${escapeHtml(t("cart_clear"))}</button>
@@ -1410,9 +1575,32 @@ function initCartUI() {
   });
   drawer.querySelector("#cartCheckout").addEventListener("click", () => {
     if (!cartState.length) return;
+    const name = drawer.querySelector("#cartName");
+    const date = drawer.querySelector("#cartDate");
+    const time = drawer.querySelector("#cartTime");
+    const checks = [
+      [name, name.value.trim(), t("cart_form_err_name")],
+      [date, date.value, t("cart_form_err_date")],
+      [time, time.value, t("cart_form_err_time")]
+    ];
+    let firstInvalid = null;
+    checks.forEach(([field, value, msg]) => {
+      const err = drawer.querySelector(`[data-err-for="${field.id}"]`);
+      const bad = !value;
+      field.classList.toggle("invalid", bad);
+      if (err) { err.textContent = msg; err.hidden = !bad; }
+      if (bad && !firstInvalid) firstInvalid = field;
+    });
+    if (firstInvalid) { firstInvalid.focus(); return; }
+    window.__cartCustomer = {
+      name: name.value.trim(),
+      date: formatDate(date.value) || date.value,
+      time: time.value,
+      notes: drawer.querySelector("#cartNotes").value.trim()
+    };
     const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(cartWaMessage())}`;
     window.open(url, "_blank", "noopener,noreferrer");
-    // Cart stays filled so the customer can go back and edit the selection.
+    // Cart and form stay filled so the customer can go back and edit the selection.
   });
   drawer.addEventListener("click", e => { if (e.target === drawer) closeCartDrawer(); });
   drawer.addEventListener("close", () => document.body.classList.remove("no-scroll"), { once: true });
@@ -1451,6 +1639,69 @@ function initCartUI() {
 }
 initCartUI();
 
+// ================= Draggable floating cart (Pointer Events, no libraries) =================
+function makeCartFloatDraggable(el) {
+  if (!el || el.dataset.draggable === "1") return;
+  el.dataset.draggable = "1";
+  const SAFE = 8;                       // px keep-out from viewport edges
+  const DRAG_THRESHOLD = 6;             // px before a press counts as a drag
+  let dragging = false, moved = false, startX = 0, startY = 0, offX = 0, offY = 0;
+
+  const clamp = (x, y) => {
+    const r = el.getBoundingClientRect();
+    const maxX = window.innerWidth - r.width - SAFE;
+    const maxY = window.innerHeight - r.height - SAFE;
+    return [Math.min(Math.max(SAFE, x), Math.max(SAFE, maxX)), Math.min(Math.max(SAFE, y), Math.max(SAFE, maxY))];
+  };
+  const place = (x, y) => {
+    const [cx, cy] = clamp(x, y);
+    el.style.left = `${cx}px`; el.style.top = `${cy}px`;
+    el.style.right = "auto"; el.style.bottom = "auto";
+  };
+
+  el.addEventListener("pointerdown", e => {
+    if (e.button !== 0 && e.pointerType === "mouse") return;
+    const r = el.getBoundingClientRect();
+    dragging = true; moved = false;
+    startX = e.clientX; startY = e.clientY;
+    offX = e.clientX - r.left; offY = e.clientY - r.top;
+    el.setPointerCapture(e.pointerId);
+  });
+  el.addEventListener("pointermove", e => {
+    if (!dragging) return;
+    const dx = e.clientX - startX, dy = e.clientY - startY;
+    if (!moved && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+      moved = true;
+      el.classList.add("is-dragging");
+    }
+    if (moved) place(e.clientX - offX, e.clientY - offY);
+  });
+  const end = e => {
+    if (!dragging) return;
+    dragging = false;
+    el.classList.remove("is-dragging");
+    window.__cartDragMoved = moved;   // click handler skips opening on a real drag
+    if (moved) {
+      const r = el.getBoundingClientRect();
+      place(r.left, r.top);
+      try { localStorage.setItem("byniadania-cart-pos", JSON.stringify({ x: r.left, y: r.top })); } catch (err) {}
+    }
+  };
+  el.addEventListener("pointerup", end);
+  el.addEventListener("pointercancel", end);
+  el.addEventListener("touchstart", () => {}, { passive: true }); // allow vertical page scroll intent to be claimed by pointer capture
+
+  // Restore last position only if it is still on-screen (rotation, resize, other device).
+  try {
+    const saved = JSON.parse(localStorage.getItem("byniadania-cart-pos") || "null");
+    if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) place(saved.x, saved.y);
+  } catch (err) {}
+  window.addEventListener("resize", () => {
+    const r = el.getBoundingClientRect();
+    if (el.style.left) place(r.left, r.top);
+  });
+}
+
 // ================= Price list cart buttons (index.html) =================
 (function buildCartButtons() {
   const list = document.querySelector("#prices .price-list");
@@ -1470,26 +1721,12 @@ initCartUI();
     btn.dataset.cartName = name;
     btn.dataset.cartCategory = "Nail Art";
     btn.textContent = t("add_to_cart");
-    if (priceEl.textContent.includes("–") || priceEl.textContent.includes("/") || priceEl.textContent.includes("+")) {
-      // Range or dual (natural/extension) price: no fixed price in the cart.
-      // "Rp100K / 150K" style values carry an implied K suffix per part.
-      const parts = priceEl.textContent.split(/[–/]/);
-      const hasK = /K\b/i.test(priceEl.textContent);
-      const nums = parts
-        .map(p => {
-          const clean = p.replace(/[^\d]/g, "");
-          if (!clean) return null;
-          let n = parseInt(clean, 10);
-          if (hasK) n *= 1000;
-          return n;
-        })
-        .filter(n => n != null);
-      if (nums.length >= 2) { btn.dataset.cartMin = String(nums[0]); btn.dataset.cartMax = String(nums[1]); }
-    } else if (/^Rp\d/.test(priceEl.textContent.trim())) {
-      btn.dataset.cartPrice = priceEl.textContent.trim();
-    } else {
-      btn.removeAttribute("data-cart-price");
-    }
+    const parsed = parseBrochurePrice(priceEl.textContent);
+    if (parsed && parsed.min != null && parsed.max != null) {
+      btn.dataset.cartMin = String(parsed.min); btn.dataset.cartMax = String(parsed.max);
+    } else if (parsed && parsed.price != null) {
+      btn.dataset.cartPrice = String(parsed.price);
+    } // else: leave undefined -> cart shows "Perlu konfirmasi"
     if (needsVariant) {
       const variantRow = document.createElement("div");
       variantRow.className = "cart-variant-row";
@@ -1525,6 +1762,24 @@ function applyCartButtonLanguage() {
     sel.value = current;
   });
   document.querySelectorAll("#cartDrawer h2").forEach(el => { el.textContent = t("cart_title"); });
+  const formTitle = document.querySelector("#cartForm h3");
+  if (formTitle) formTitle.textContent = t("cart_form_title");
+  const fName = document.querySelector("#cartForm label:nth-of-type(1) span");
+  // Re-translate the customer form labels / placeholders / validation messages.
+  const map = [
+    ["[for='cartName'], #cartForm label:has(#cartName) span", "cart_form_name"],
+    ["#cartForm label:has(#cartDate) span", "cart_form_date"],
+    ["#cartForm label:has(#cartTime) span", "cart_form_time"],
+    ["#cartForm label:has(#cartNotes) span", "cart_form_notes"]
+  ];
+  map.forEach(([sel, key]) => {
+    const el = document.querySelector(sel);
+    if (el) el.textContent = `${t(key)}${key === "cart_form_notes" ? "" : " *"}`;
+  });
+  const namePh = document.querySelector("#cartName");
+  if (namePh) namePh.placeholder = t("cart_form_name_ph");
+  const formNote = document.querySelector(".cart-form-note");
+  if (formNote) formNote.textContent = t("cart_form_note");
   const checkout = document.querySelector("#cartCheckout");
   if (checkout) checkout.textContent = t("cart_checkout");
   const clear = document.querySelector("#cartClear");
