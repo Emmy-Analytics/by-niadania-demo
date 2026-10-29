@@ -79,6 +79,7 @@ const I18N = {
     intro_text: "Beauty is personal. From a subtle everyday manicure to a design that feels unmistakably yours, every detail begins with your own style.",
     intro_text2: "Studio located in Cipinang, East Jakarta. Open Thursday 11.00–18.00 — by appointment.",
     intro_link: "Book an appointment",
+    studio_video_pending: "Studio video isn't available yet — coming soon.",
     services_title: "Our <em>services</em>",
     svc_nail_desc: "From soft & minimal to artful details.",
     svc_lash_title: "Eyelash <em>& Brow</em>",
@@ -228,6 +229,10 @@ const I18N = {
     cart_wa_variant: "Variant",
     cart_wa_price: "Price",
     cart_wa_details: "Name:\nPreferred date:\nPreferred time:",
+    cart_wa_services: "Services selected:",
+    cart_qty: "Quantity",
+    cart_unit_price: "Unit price",
+    cart_item_subtotal: "Item subtotal",
     cart_wa_name: "Name",
     cart_wa_date: "Preferred date",
     cart_wa_time: "Preferred time",
@@ -273,6 +278,7 @@ const I18N = {
     intro_text: "Keindahan itu personal. Dari manicure sehari-hari yang lembut sampai desain yang terasa khas dirimu, setiap detail dimulai dari gayamu sendiri.",
     intro_text2: "Studio berada di Cipinang, Jakarta Timur. Buka hari Kamis 11.00–18.00 — dengan appointment.",
     intro_link: "Reservasi sekarang",
+    studio_video_pending: "Video studio belum tersedia — segera hadir.",
     services_title: "Layanan <em>kami</em>",
     svc_nail_desc: "Dari soft & minimal sampai detail yang artistik.",
     svc_lash_title: "Eyelash <em>& Brow</em>",
@@ -419,6 +425,10 @@ const I18N = {
     cart_wa_variant: "Varian",
     cart_wa_price: "Harga",
     cart_wa_details: "Nama:\nTanggal yang diinginkan:\nJam yang diinginkan:",
+    cart_wa_services: "Layanan yang dipilih:",
+    cart_qty: "Jumlah",
+    cart_unit_price: "Harga satuan",
+    cart_item_subtotal: "Subtotal item",
     cart_wa_name: "Nama",
     cart_wa_date: "Tanggal yang diinginkan",
     cart_wa_time: "Jam yang diinginkan",
@@ -587,6 +597,35 @@ if ("IntersectionObserver" in window && !reducedMotion) {
 } else {
   revealElements.forEach(el => el.classList.add("visible"));
 }
+
+// ---------------- Studio video (real source if configured, elegant fallback) ----------------
+// To publish a real studio video: set STUDIO_VIDEO_SRC to a browser-playable URL
+// (Drive direct file: https://drive.google.com/uc?export=download&id=FILE_ID works
+// for mp4; or any hosted .mp4/.webm). Until then a graceful placeholder shows.
+const STUDIO_VIDEO_SRC = ""; // e.g. "https://drive.google.com/uc?export=download&id=XXXX"
+(function initStudioVideo() {
+  const wrap = document.querySelector("[data-studio-video]");
+  if (!wrap) return;
+  const video = wrap.querySelector("video");
+  const fallback = wrap.querySelector(".studio-video-fallback");
+  const applyI18n = () => {
+    if (fallback && !wrap.classList.contains("has-video")) {
+      fallback.querySelector("p").textContent = t("studio_video_pending");
+    }
+  };
+  applyI18n();
+  if (!STUDIO_VIDEO_SRC || !video) return;
+  video.src = STUDIO_VIDEO_SRC;
+  video.addEventListener("loadedmetadata", () => {
+    wrap.classList.add("has-video");
+    video.hidden = false;
+  }, { once: true });
+  video.addEventListener("error", () => {
+    wrap.classList.remove("has-video");
+    video.hidden = true;
+    applyI18n();
+  }, { once: true });
+})();
 
 // ---------------- Hero 3D parallax (pointer-driven, layered transforms) ----------------
 const heroScene = document.querySelector("#heroScene");
@@ -1190,13 +1229,18 @@ function parseIdr(value) {
 /**
  * Single shared IDR formatter (pricelist, service cards, cart, WhatsApp message).
  * Values from the Sheet are already full Rupiah amounts — never divide by 1000.
+ * Compact display: Rp3k, Rp10k, Rp60k, Rp150k — lowercase k, no unneeded decimals.
  * Invalid / missing values never render as Rp0, NaN or undefined.
  */
-const IDR_FMT = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
 function formatIDR(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return null;
-  return IDR_FMT.format(n).replace(/\s/g, ""); // "Rp150.000" (Intl may insert NBSP)
+  if (n >= 1000) {
+    const k = n / 1000;
+    const rounded = Math.round(k * 10) / 10;
+    return `Rp${Number.isInteger(rounded) ? rounded : rounded.toFixed(1).replace(/\.0$/, "")}k`;
+  }
+  return `Rp${n}`;
 }
 
 /** Parse brochure price text like "Rp150.000", "Rp100K / 150K", "Rp3–35K", "Rp125K+". */
@@ -1394,7 +1438,7 @@ function persistCart() {
 }
 
 function cartCount() {
-  return cartState.reduce((sum, it) => sum + (it.qty || 1), 0);
+  return cartState.reduce((sum, it) => sum + itemQty(it), 0);
 }
 
 function parseIdrToNumber(text) {
@@ -1415,37 +1459,58 @@ function cartItemPrice(item) {
   return { type: "confirm" };
 }
 
+function itemQty(item) {
+  const q = Number(item.qty);
+  return Number.isInteger(q) && q >= 1 ? q : 1; // migrate legacy items safely
+}
+
+function itemSubtotal(item) {
+  const p = cartItemPrice(item);
+  if (p.type === "exact") return { value: p.value * itemQty(item), certain: true };
+  if (p.type === "range") return { value: p.min * itemQty(item), certain: false };
+  return { value: 0, certain: false };
+}
+
 function cartSubtotal() {
   let total = 0;
-  let allConfirmed = true;
+  let allCertain = true;
   cartState.forEach(it => {
-    const p = cartItemPrice(it);
-    if (p.type === "exact") total += p.value * (it.qty || 1);
-    else if (p.type === "range") total += p.min * (it.qty || 1);
-    else allConfirmed = false;
+    const sub = itemSubtotal(it);
+    total += sub.value;
+    if (!sub.certain) allCertain = false;
   });
-  return { total, allConfirmed };
+  return { total, allConfirmed: allCertain };
 }
 
 function priceTextFor(p) {
   if (p.type === "exact") return formatRupiah(p.value);
-  if (p.type === "range") return `${t("cart_range")} ${formatRupiah(p.min)}`;
+  if (p.type === "range") return `${formatRupiah(p.min)}–${formatRupiah(p.max)}`;
   return t("cart_confirm");
 }
 function buildCartUI() {
   const has = cartState.length > 0;
   const cartBadge = document.querySelector("#cartBadge");
   const floatBtn = document.querySelector("#cartFloat");
-  const items = cartState.length ? cartState.map(it => {
+  const items = cartState.length ? cartState.map((it, idx) => {
     const p = cartItemPrice(it);
-    const priceText = priceTextFor(p);
-    return `<li class="cart-item">
+    const unitText = p.type === "exact" ? formatRupiah(p.value)
+      : p.type === "range" ? `${formatRupiah(p.min)}–${formatRupiah(p.max)}`
+      : t("cart_confirm");
+    const sub = itemSubtotal(it);
+    const q = itemQty(it);
+    return `<li class="cart-item" data-cart-idx="${idx}">
       <div class="cart-item-copy">
         <strong>${escapeHtml(it.name)}</strong>
         ${it.variant ? `<span class="cart-item-variant">${t("cart_wa_variant")}: ${escapeHtml(it.variant)}</span>` : ""}
-        <span class="cart-item-price${p.type === "confirm" ? " is-confirm" : ""}">${escapeHtml(priceText)}</span>
+        <span class="cart-item-price${p.type === "confirm" ? " is-confirm" : ""}">${t("cart_unit_price")}: ${escapeHtml(unitText)}</span>
+        <span class="cart-item-subtotal">${t("cart_item_subtotal")}: ${sub.value > 0 ? escapeHtml(formatRupiah(sub.value)) : escapeHtml(t("cart_confirm"))}</span>
       </div>
       <div class="cart-item-actions">
+        <div class="cart-qty" data-cart-qty="${escapeHtml(it.id)}">
+          <button type="button" class="cart-qty-btn" data-qty-dec aria-label="−"><span>−</span></button>
+          <span class="cart-qty-num" aria-live="polite">${q}</span>
+          <button type="button" class="cart-qty-btn" data-qty-inc aria-label="+"><span>+</span></button>
+        </div>
         <button class="cart-item-remove" data-cart-remove="${escapeHtml(it.id)}" aria-label="${t("cart_remove")}">&times;</button>
       </div>
     </li>`;
@@ -1494,11 +1559,15 @@ function priceTextFor(p) {
   return t("cart_confirm");
 }
 function cartWaMessage() {
-  const lines = [t("cart_wa_greeting"), ""];
+  const lines = [t("cart_wa_greeting"), "", `${t("cart_wa_services")}:`];
   cartState.forEach((it, i) => {
+    const p = cartItemPrice(it);
+    const sub = itemSubtotal(it);
     lines.push(`${i + 1}. ${it.name}`);
     if (it.variant) lines.push(`   ${t("cart_wa_variant")}: ${it.variant}`);
-    lines.push(`   ${t("cart_wa_price")}: ${priceTextFor(cartItemPrice(it))}`);
+    lines.push(`   ${t("cart_qty")}: ${itemQty(it)}`);
+    lines.push(`   ${t("cart_unit_price")}: ${priceTextFor(p)}`);
+    lines.push(`   ${t("cart_item_subtotal")}: ${sub.value > 0 ? formatRupiah(sub.value) : t("cart_confirm")}`);
   });
   const sub = cartSubtotal();
   if (sub.total > 0) lines.push("", `${t("cart_subtotal")}: ${formatRupiah(sub.total)}`);
@@ -1606,8 +1675,19 @@ function initCartUI() {
   drawer.addEventListener("close", () => document.body.classList.remove("no-scroll"), { once: true });
   document.addEventListener("keydown", e => { if (e.key === "Escape" && drawer.open) closeCartDrawer(); });
 
-  // Remove buttons are delegated so re-renders stay bound.
+  // Remove + quantity buttons are delegated so re-renders stay bound.
   drawer.querySelector("#cartItems").addEventListener("click", e => {
+    const qtyBox = e.target.closest("[data-cart-qty]");
+    if (qtyBox) {
+      const it = cartState.find(x => x.id === qtyBox.dataset.cartQty);
+      if (!it) return;
+      if (e.target.closest("[data-qty-inc]")) it.qty = itemQty(it) + 1;
+      else if (e.target.closest("[data-qty-dec]")) it.qty = Math.max(1, itemQty(it) - 1); // min 1, delete via ×
+      else return;
+      persistCart();
+      buildCartUI();
+      return;
+    }
     const btn = e.target.closest("[data-cart-remove]");
     if (!btn) return;
     cartState = cartState.filter(it => it.id !== btn.dataset.cartRemove);
@@ -1618,13 +1698,15 @@ function initCartUI() {
   document.addEventListener("click", e => {
     const btn = e.target.closest("[data-cart-add]");
     if (!btn) return;
-    const existing = cartState.find(it => it.id === btn.dataset.cartAdd);
-    if (existing) { existing.qty = (existing.qty || 1) + 1; }
+    const variant = btn.dataset.cartVariant || "";
+    // Same service + same variant merges quantity; different variants stay separate.
+    const existing = cartState.find(it => it.id === btn.dataset.cartAdd && (it.variant || "") === variant);
+    if (existing) { existing.qty = itemQty(existing) + 1; }
     else {
       cartState.push({
         id: btn.dataset.cartAdd,
         name: btn.dataset.cartName,
-        variant: btn.dataset.cartVariant || "",
+        variant,
         category: btn.dataset.cartCategory || "",
         price: btn.dataset.cartPrice ? parseIdrToNumber(btn.dataset.cartPrice) : null,
         min: btn.dataset.cartMin ? parseIdrToNumber(btn.dataset.cartMin) : null,
