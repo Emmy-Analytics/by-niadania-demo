@@ -52,15 +52,16 @@ em{font-style:italic}
 .text-link:hover:after{transform:scaleX(.4)}
 
 /* Hero */
-.hero{min-height:640px;padding-top:64px;padding-bottom:76px;display:grid;grid-template-columns:.9fr 1.1fr;gap:6%;align-items:center}
-.hero-copy h1{font-size:clamp(46px,5.6vw,74px);letter-spacing:-.02em;margin-bottom:22px}
+.hero{min-height:640px;padding-top:64px;padding-bottom:76px;display:grid;grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr);gap:clamp(32px,6%,72px);align-items:center}
+.hero-copy{display:flex;flex-direction:column;align-items:flex-start}
+.hero-copy h1{font-size:clamp(46px,5.2vw,68px);letter-spacing:-.02em;margin-bottom:22px;line-height:1.06}
 .hero-copy h1 em{color:var(--rosewood)}
-.hero-description{font-size:15px;max-width:400px;margin:0 0 30px;color:var(--muted)}
+.hero-description{font-size:15px;max-width:42ch;margin:0 0 30px;color:var(--muted)}
 .hero-actions{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
-.hero-note{margin-top:34px;display:flex;gap:26px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
-.hero-visual{padding-right:2%}
+.hero-note{margin-top:30px;display:flex;gap:26px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.hero-visual{display:flex;justify-content:flex-end;padding-right:0}
 .hero-scene{position:relative;height:520px;perspective:900px}
-.hero-carousel{position:relative;height:520px;border-radius:200px 200px 28px 28px;box-shadow:var(--shadow);overflow:hidden;background:linear-gradient(160deg,var(--blush),var(--lilac) 55%,var(--mist));isolation:isolate;touch-action:pan-y}
+.hero-carousel{position:relative;width:100%;max-width:520px;height:520px;border-radius:200px 200px 28px 28px;box-shadow:var(--shadow);overflow:hidden;background:linear-gradient(160deg,var(--blush),var(--lilac) 55%,var(--mist));isolation:isolate;touch-action:pan-y}
 .hero-carousel-track{position:absolute;inset:0;display:flex;transition:transform .55s cubic-bezier(.22,.7,.25,1);will-change:transform}
 .hero-slide{flex:0 0 100%;width:100%;height:100%;background-size:cover;background-position:center;opacity:.55;transform:scale(1.035);transition:opacity .55s ease,transform .7s ease}
 .hero-slide.active{opacity:1;transform:scale(1)}
@@ -82,22 +83,28 @@ em{font-style:italic}
 
 /* Intro */
 .intro{padding:70px 0 75px}
-.intro-grid{display:grid;grid-template-columns:1fr 1fr 1.1fr;gap:7%;align-items:start}
+.intro-grid{display:grid;grid-template-columns:1fr 1fr 1.1fr;gap:clamp(28px,5%,56px);align-items:center}
 .intro h2{font-size:clamp(36px,4.4vw,58px);letter-spacing:-.02em}
 .intro h2 em{color:var(--rosewood)}
 .intro-text p{margin:0 0 22px;color:var(--muted)}
 
-/* Studio video */
-.studio-video{margin:0;border-radius:var(--radius-lg);overflow:hidden;background:var(--mist);position:relative}
-.studio-video video{width:100%;display:block;aspect-ratio:16/10;object-fit:cover}
+/* Studio video — framed like a premium editorial card, not a pasted widget.
+   Soft padding + ivory matte keeps the embed away from the edges; IG's vertical
+   reel gets a taller ratio than 16:10 landscape sources. */
+.studio-video{margin:0;border-radius:var(--radius-lg);overflow:hidden;background:var(--paper);border:1px solid var(--line);box-shadow:var(--shadow);position:relative;padding:clamp(12px,1.6vw,22px)}
+.studio-video video{width:100%;display:block;aspect-ratio:16/10;object-fit:cover;border-radius:calc(var(--radius-lg) - 10px)}
 .studio-video video[hidden]{display:none}
 .studio-video-fallback{display:flex;align-items:center;justify-content:center;min-height:220px;padding:24px;text-align:center;color:var(--muted);font-size:13px;font-style:italic}
 .studio-video.has-video .studio-video-fallback{display:none}
+.studio-video.has-video .studio-video-fallback.is-shown{display:flex}
+.studio-embed{display:block;width:100%;aspect-ratio:4/5;max-height:560px;border:0;border-radius:calc(var(--radius-lg) - 10px);background:var(--paper)}
+.studio-embed[data-landscape]{aspect-ratio:16/10;max-height:none}
 .studio-video.has-video video[hidden]{display:block}
 @media(max-width:900px){
-  .intro-grid{grid-template-columns:1fr;gap:22px}
-  .studio-video{order:3}
+  .intro-grid{grid-template-columns:1fr;gap:26px}
+  .studio-video{order:3;padding:10px}
   .studio-video-fallback{min-height:170px}
+  .studio-embed{aspect-ratio:4/5;max-height:none}
 }
 
 /* Section headings */
@@ -286,6 +293,8 @@ input.invalid,select.invalid{border-color:#a05151}
 .footer-credit .portoweb-link:hover{color:var(--ink)}
 .footer-credit .portoweb-ig{color:var(--rosewood);display:inline-flex;align-items:center;transition:.2s}
 .footer-credit .portoweb-ig:hover{color:var(--ink)}
+.footer-credit .portoweb-wa{color:var(--rosewood);display:inline-flex;align-items:center;transition:.2s;margin:0 2px}
+.footer-credit .portoweb-wa:hover{color:var(--ink)}
 
 /* Booking dialog */
 .booking-dialog{width:min(560px,calc(100% - 28px));border:0;border-radius:var(--radius-lg);padding:34px;background:var(--paper);color:var(--ink);box-shadow:var(--shadow)}
@@ -338,10 +347,15 @@ input.invalid,select.invalid{border-color:#a05151}
   .menu-toggle span{height:1px;width:16px;background:var(--ink);transition:transform .2s}
   .menu-toggle[aria-expanded=true] span:first-child{transform:translateY(3.5px) rotate(45deg)}
   .menu-toggle[aria-expanded=true] span:last-child{transform:translateY(-3.5px) rotate(-45deg)}
-  .hero{display:flex;flex-direction:column;align-items:stretch;min-height:auto;padding-top:40px;padding-bottom:56px;gap:30px}
-  .hero-copy h1{font-size:clamp(44px,11vw,64px)}
-  .hero-scene{height:min(112vw,440px)}
+  .hero{display:flex;flex-direction:column;align-items:stretch;min-height:auto;padding-top:36px;padding-bottom:52px;gap:32px}
+  .hero-copy h1{font-size:clamp(40px,10.5vw,60px);line-height:1.08;margin-bottom:18px}
+  .hero-description{margin-bottom:24px}
+  .hero-note{margin-top:24px;gap:18px;flex-wrap:wrap}
+  .hero-actions{gap:14px}
+  .hero-scene{height:min(118vw,460px)}
+  .hero-carousel{max-width:100%;height:min(118vw,460px)}
   .intro-grid,.booking-inner,.booking-options,.price-section,.testimonial-section{grid-template-columns:1fr;gap:30px}
+  .studio-video{max-width:520px;margin-inline:auto;width:100%}
   .intro,.price-section,.testimonial-section,.booking-options{padding:56px 0}
   .booking-section{padding:60px 0}
   .booking-form{padding:26px 22px}
@@ -473,6 +487,11 @@ input.invalid,select.invalid{border-color:#a05151}
   font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;
   border:2px solid var(--paper);
 }
+/* A closed dialog must never take layout space: author display on a dialog
+   overrides the UA's `dialog:not([open]){display:none}` and would push the
+   panel into the page flow (the "cart under the footer" bug). */
+dialog:not([open]){display:none}
+[hidden]{display:none !important}
 .cart-drawer{
   width:min(420px,calc(100% - 32px));max-height:min(86vh,calc(100dvh - 32px));margin-left:auto;margin-right:14px;
   border:0;border-radius:var(--radius-lg);padding:28px 24px;background:var(--paper);
@@ -596,9 +615,48 @@ input.invalid,select.invalid{border-color:#a05151}
 .review-card-text{margin:0;font-size:13px;line-height:1.6;color:var(--ink)}
 .rv-media-btn{justify-self:start;margin-top:4px;border:1px solid var(--line);border-radius:100px;background:var(--paper);padding:8px 16px;font:inherit;font-size:12px;cursor:pointer;color:var(--ink);transition:.2s}
 .rv-media-btn:hover{background:var(--rosewood);color:#fbf8f3;border-color:var(--rosewood)}
-.reviews-empty{text-align:center;padding:40px 20px;color:var(--muted)}
-.reviews-empty p:first-child{font-family:var(--serif);font-size:20px;color:var(--ink);margin:0 0 8px}
+/* -------- Media strip on review cards: swipeable, scroll-snap -------- */
+.rv-media-strip{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:2px 0;cursor:zoom-in;border-radius:12px}
+.rv-media-strip::-webkit-scrollbar{display:none}
+.rv-media-strip::after{content:"";min-width:1px} /* scroll hint: last item snaps fully */
+.rv-thumb{flex:0 0 auto;scroll-snap-align:start;width:96px;height:96px;border-radius:12px;overflow:hidden;background:var(--ivory);position:relative}
+.rv-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.rv-thumb.rv-thumb-broken{background:var(--ivory)}
+.rv-thumb-video{display:flex;align-items:center;justify-content:center;background:linear-gradient(150deg,var(--blush),var(--lilac))}
+.rv-thumb-play{font-size:20px;color:#fff;background:rgba(39,39,42,.55);width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;padding-left:3px}
+/* -------- Lightbox -------- */
 .review-modal{width:min(860px,calc(100% - 32px));max-height:88vh;border:0;border-radius:24px;padding:24px;background:var(--paper);overflow:auto}
+.rv-lightbox-stage{position:relative;display:flex;align-items:center;justify-content:center;min-height:60vh}
+.rv-media-slide{width:100%;display:flex;justify-content:center}
+.rv-media-slide img{max-width:100%;max-height:72vh;object-fit:contain;border-radius:14px;background:#fff}
+.rv-media-slide video{max-width:100%;max-height:72vh;border-radius:14px;background:#000}
+.rv-media-slide iframe{width:min(640px,100%);aspect-ratio:16/10;border:0;border-radius:14px;background:#000}
+.rv-lightbox-bar{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:14px}
+.rv-lightbox-pos{font-size:13px;color:var(--muted);min-width:52px;text-align:center;font-variant-numeric:tabular-nums}
+.rv-lightbox-nav{width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:#fff;font-size:20px;line-height:1;cursor:pointer;color:var(--ink)}
+.rv-lightbox-nav:hover{background:var(--ink);color:#fbf8f3;border-color:var(--ink)}
+.rv-lightbox-nav[hidden]{display:none}
+.rv-lightbox-close{position:absolute;top:14px;right:14px;z-index:2}
+@media(max-width:560px){
+  .rv-lightbox-stage{min-height:46vh}
+  .rv-media-slide img,.rv-media-slide video{max-height:56vh}
+  .rv-thumb{width:84px;height:84px}
+}
+.reviews-empty{text-align:center;padding:40px 20px;color:var(--muted)}
+/* Review category filter — kept OUTSIDE the scroll area */
+.review-filter-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.review-filter{border:1px solid var(--line);border-radius:100px;background:#fff;padding:7px 16px;font:inherit;font-size:12px;color:var(--muted);cursor:pointer;transition:.2s}
+.review-filter.active{background:var(--ink);color:#fbf8f3;border-color:var(--ink)}
+/* Scrollable review area: grid scrolls vertically, filters stay visible.
+   Desktop 2 columns, mobile 1 column; comfortable touch scrolling. */
+.reviews-scroll{max-height:640px;overflow-y:auto;overscroll-behavior:contain;padding-right:6px;scrollbar-width:thin}
+.reviews-scroll::-webkit-scrollbar{width:6px}
+.reviews-scroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+@media(max-width:900px){
+  .reviews-scroll{max-height:520px}
+}
+.reviews-empty p:first-child{font-family:var(--serif);font-size:20px;color:var(--ink);margin:0 0 8px}
+/* legacy review-modal rules below are superseded by the rv-lightbox block */
 .review-modal::backdrop,.review-form-modal::backdrop{background:rgba(23,23,25,.5);backdrop-filter:blur(3px)}
 .review-modal-body{display:grid;gap:14px}
 .review-modal-body img{width:100%;max-height:70vh;object-fit:contain;border-radius:14px;background:#fff}
@@ -624,6 +682,7 @@ input.invalid,select.invalid{border-color:#a05151}
 .rv-preview video{max-width:220px;border-radius:10px}
 .rv-file-remove{border:1px solid var(--line);border-radius:100px;background:#fff;padding:6px 12px;font:inherit;font-size:11px;cursor:pointer;justify-self:start}
 .rv-note{margin:0;font-size:11px;color:var(--muted);font-style:italic}
+.rv-limits{font-style:normal;font-size:10px;color:var(--muted);letter-spacing:.02em}
 .rv-status{margin:0;font-size:13px;padding:10px 14px;border-radius:12px}
 .rv-status.is-busy{background:var(--mist);color:var(--ink)}
 .rv-status.is-ok{background:#e4efe2;color:#2c4a2f}
@@ -636,6 +695,12 @@ input.invalid,select.invalid{border-color:#a05151}
 }
 @media(max-width:560px){
   .reviews-grid{grid-template-columns:1fr}
+  .reviews-scroll{padding-right:0}
+  .review-filter{padding:9px 18px;font-size:13px} /* larger touch targets */
+}
+@media(max-width:400px){
+  .review-filter-row{gap:6px}
+  .review-filter{padding:9px 14px;font-size:12px}
 }
 
 /* ================= Reduced motion already covered globally above ================= */

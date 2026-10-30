@@ -17,6 +17,284 @@ const CATEGORY_PHOTOS = {
   "makeup": ["assets/photos/makeup.jpg", "assets/photos/makeup2.jpg"]
 };
 const HERO_FALLBACK_PHOTO = "assets/photos/nail2.jpg";
+
+/* ================= Centralized media management (Google Sheet "Media" tab) =================
+ * Reads ?action=media from the existing APPS_SCRIPT_URL. Sections used:
+ * hero, service_nail, service_eyelash, service_makeup, service_brow, studio.
+ * Media tab columns (either schema works, getMedia_ accepts both):
+ *  legacy: media_id, section, judul, tipe_media, media_url, thumbnail_url, deskripsi, status, urutan
+ *  target: id, section, judul, tipe_media, media_url, alt_text, aktif, urutan
+ * Only rows with a valid http(s) URL are returned by the server; anything else is
+ * ignored. If the section has no published row, the built-in local fallback stays.
+ */
+const MEDIA_CACHE_KEY = "byniadania-media-cache-v1"; // sessionStorage, 5 minutes
+const MEDIA_CACHE_TTL_MS = 5 * 60 * 1000;
+const MEDIA_SECTION_BY_CATEGORY = {
+  "service_nail": "nail-art",
+  "service_eyelash": "eyelash",
+  "service_brow": "brow",
+  "service_makeup": "makeup"
+};
+let mediaBySection = {};
+
+// Sheets use hyphens (service-nail); JS lookup keys use underscores
+// (service_nail). Normalize BOTH directions so old sheet data keeps working.
+function normalizeMediaSection(raw) {
+  return String(raw || "").trim().toLowerCase().replace(/[\s\-]+/g, "_");
+}
+
+function mediaSectionFor(item) {
+  return MEDIA_SECTION_BY_CATEGORY[normalizeMediaSection(item.section)] || null;
+}
+
+function driveDirectUrl(url, kind) {
+  // Convert a Drive share/file URL into a direct URL only when the file id
+  // can be extracted safely. Plain Drive file pages are NOT direct media.
+  // Recognizes: /file/d/ID/view, /open?id=ID, /uc?id=ID, ?id=ID, trailing sharing params.
+  // Video needs export=download to be playable by <video>; images use export=view.
+  try {
+    const raw = String(url || "").trim();
+    if (!raw) return "";
+
+    // Mendukung ID Google Drive langsung
+    if (/^[a-zA-Z0-9_-]{20,}$/.test(raw)) {
+      const mode = kind === "video" ? "download" : "view";
+      return `https://drive.google.com/uc?export=${mode}&id=${raw}`;
+    }
+
+    const u = new URL(raw);
+    if (!/(^|\.)google\.com$/.test(u.hostname)) return raw; // external URLs pass through untouched
+    let id = u.searchParams.get("id") || "";
+    if (!id) {
+      const m = raw.match(/\/file\/d\/([\w-]{20,})/) || raw.match(/\/d\/([\w-]{20,})/);
+      if (m) id = m[1];
+    }
+    if (!id) return raw; // unknown Drive URL shape — let caller handle fallback
+    if (kind === "video") {
+      return `https://drive.google.com/uc?export=download&id=${id}`;
+    }
+
+    // Gunakan endpoint thumbnail khusus gambar
+    return `https://drive.google.com/thumbnail?id=${id}&sz=w1600`;
+  } catch (e) { return String(url || "").trim(); }
+}
+
+function readMediaCache() {
+  try {
+    const raw = sessionStorage.getItem(MEDIA_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || Date.now() - parsed.t > MEDIA_CACHE_TTL_MS) return null;
+    return parsed.data || null;
+  } catch (e) { return null; }
+}
+
+function writeMediaCache(data) {
+  try { sessionStorage.setItem(MEDIA_CACHE_KEY, JSON.stringify({ t: Date.now(), data })); } catch (e) {}
+}
+
+async function loadMedia({ force } = {}) {
+  if (!APPS_SCRIPT_URL.trim()) return {};
+  if (!force) {
+    const cached = readMediaCache();
+    if (cached) { mediaBySection = cached; return mediaBySection; }
+  }
+  try {
+    const res = await fetch(`${APPS_SCRIPT_URL}${APPS_SCRIPT_URL.includes("?") ? "&" : "?"}action=media`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const payload = await res.json();
+    if (!payload || payload.success !== true || !Array.isArray(payload.data)) throw new Error("Unexpected response");
+    mediaBySection = payload.data.reduce((acc, row) => {
+      const sec = normalizeMediaSection(row.section);
+      const rawUrl = String(row.media_url || "").trim();
+      const rawType = String(row.tipe_media || "foto").trim().toLowerCase();
+      const type = rawType === "video" ? "video" : "foto";
+
+      const url = /^https?:\/\//i.test(rawUrl)
+        ? (rawUrl.includes("drive.google.com")
+            ? driveDirectUrl(rawUrl, type === "video" ? "video" : "photo")
+            : rawUrl)
+        : driveDirectUrl(rawUrl, type === "video" ? "video" : "photo");
+
+      if (!sec || !url) return acc;
+      (acc[sec] = acc[sec] || []).push({
+        title: row.judul || "",
+        type,
+        // Keep the ORIGINAL url; per-platform conversion happens at render time
+        // (a social embed URL must never be passed through Drive conversion).
+        url,
+        thumb: driveDirectUrl(row.thumbnail_url, "photo"),
+        alt: row.alt_text || row.deskripsi || row.judul || "",
+        order: Number(row.urutan) || 9999
+      });
+      return acc;
+    }, {});
+    writeMediaCache(mediaBySection);
+  } catch (err) {
+    // Keep whatever we had (possibly cached data) — the site must never break because of media.
+  }
+  return mediaBySection;
+}
+
+/** Studio video: pick a source per platform, official embeds only. */
+function detectVideoSource(url) {
+  let u;
+  try { u = new URL(url); } catch (e) { return { kind: "invalid" }; }
+  const host = u.hostname.replace(/^(www|m)\./, "");
+  if (/(^|\.)instagram\.com$/.test(host)) {
+    const m = u.pathname.match(/\/(p|reel)\/([\w-]+)/);
+    return m ? { kind: "instagram", id: m[2] } : { kind: "unsupported", label: "Instagram" };
+  }
+  if (/(^|\.)tiktok\.com$/.test(host)) {
+    const m = u.pathname.match(/\/video\/(\d+)/) || u.pathname.match(/\/v\/(\d+)/);
+    return m ? { kind: "tiktok", id: m[1] } : { kind: "unsupported", label: "TikTok" };
+  }
+  if (/(^|\.)youtube\.com$/.test(host) || host === "youtu.be") {
+    const id = host === "youtu.be" ? u.pathname.slice(1) : (u.searchParams.get("v") || (u.pathname.match(/\/(shorts|embed)\/([\w-]+)/) || [])[2] || "");
+    return id ? { kind: "youtube", id } : { kind: "unsupported", label: "YouTube" };
+  }
+  if (/(^|\.)google\.com$/.test(host) && (/\/file\/d\//.test(u.pathname) || u.searchParams.get("id"))) {
+    return { kind: "drive" };
+  }
+  if (/\.(mp4|webm|mov)(\?.*)?$/i.test(u.pathname)) return { kind: "direct" };
+  return { kind: "unsupported", label: host };
+}
+
+/** Apply one published studio video from the Media tab, if any. */
+function applyMediaStudioVideo() {
+  const wrap = document.querySelector("[data-studio-video]");
+  const video = wrap?.querySelector("video");
+  const fallback = wrap?.querySelector(".studio-video-fallback");
+  const first = (mediaBySection[normalizeMediaSection("studio")] || []).find(m => m.type === "video" && m.url);
+  if (!wrap || !first) return; // keeps the existing Coming Soon placeholder
+  const src = detectVideoSource(first.url);
+  if (src.kind === "invalid" || src.kind === "unsupported") {
+    // Unknown host / malformed URL: informative message, never an empty area.
+    wrap.classList.remove("has-video");
+    if (video) video.hidden = true;
+    if (fallback) {
+      fallback.hidden = false;
+      const p = fallback.querySelector("p");
+      if (p) p.textContent = `${first.title || "Studio video"} — ${first.url}`;
+    }
+    return;
+  }
+  if (src.kind === "instagram" || src.kind === "tiktok" || src.kind === "youtube") {
+    // Official embeds only, sanitized URL (id re-built, never raw sheet HTML).
+    // IG/TikTok embeds include a profile header above a vertical video -> taller
+    // ratio; YouTube is landscape and keeps 16/10 via the data-landscape flag.
+    const embedUrl = src.kind === "instagram"
+      ? `https://www.instagram.com/p/${src.id}/embed`
+      : src.kind === "tiktok"
+        ? `https://www.tiktok.com/embed/v2/${src.id}`
+        : `https://www.youtube.com/embed/${src.id}`;
+    const frame = document.createElement("iframe");
+    frame.src = embedUrl;
+    frame.loading = "lazy";
+    frame.allow = "encrypted-media; picture-in-picture; fullscreen";
+    frame.setAttribute("allowfullscreen", "");
+    frame.setAttribute("title", first.alt || first.title || "Studio video");
+    frame.className = "studio-embed";
+    if (src.kind === "youtube") frame.setAttribute("data-landscape", "");
+    frame.addEventListener("error", () => {
+      // Embed blocked/fail: thumbnail + button to the original source.
+      frame.remove();
+      showStudioFallbackLink(wrap, first);
+    });
+    video?.remove();
+    fallback?.remove();
+    wrap.classList.add("has-video");
+    wrap.appendChild(frame);
+    return;
+  }
+  // Drive & direct MP4/WebM → real <video> playback.
+  if (!video || !fallback) return;
+  const playUrl = src.kind === "drive" ? driveDirectUrl(first.url, "video") : first.url;
+  if (first.thumb) video.poster = first.thumb;
+  video.addEventListener("error", () => {
+    // Unplayable (private Drive, codec, size): fallback + open-source button.
+    wrap.classList.remove("has-video");
+    video.hidden = true;
+    showStudioFallbackLink(wrap, first);
+  }, { once: true });
+  video.addEventListener("loadedmetadata", () => {
+    wrap.classList.add("has-video");
+    video.hidden = false;
+  }, { once: true });
+  video.src = playUrl;
+}
+
+/** Fallback UI: thumbnail (if any) + a link out. Never an empty area. */
+function showStudioFallbackLink(wrap, media) {
+  let box = wrap.querySelector(".studio-video-fallback");
+  if (!box) {
+    box = document.createElement("div");
+    box.className = "studio-video-fallback";
+    wrap.appendChild(box);
+  }
+  box.hidden = false;
+  wrap.classList.add("has-video");
+  box.classList.add("is-shown");
+  box.innerHTML = "";
+  if (media.thumb) {
+    const img = new Image();
+    img.src = media.thumb;
+    img.alt = media.alt || media.title || "";
+    img.style.cssText = "width:100%;max-height:220px;object-fit:cover;border-radius:inherit";
+    img.addEventListener("error", () => img.remove());
+    box.appendChild(img);
+  }
+  const a = document.createElement("a");
+  a.href = media.url;
+  a.target = "_blank";
+  a.rel = "noopener";
+  a.className = "text-link";
+  a.textContent = media.title || "Open original video";
+  box.appendChild(a);
+}
+
+/** Apply service-card photos from the Media tab (only replaces the CSS background
+ *  when a real published row exists for that section). */
+function applyMediaServicePhotos() {
+  const classFor = { service_nail: "nails-photo", service_eyelash: "lash-photo", service_makeup: "makeup-photo", service_brow: "brow-photo" };
+  Object.entries(classFor).forEach(([rawSec, cls]) => {
+    const sec = normalizeMediaSection(rawSec); // accepts service-nail AND service_nail
+    const first = (mediaBySection[sec] || []).find(m => m.type === "foto" && m.url);
+    const el = document.querySelector(`.service-photo.${cls}`);
+    if (!el || !first) return;
+    const img = new Image();
+    // Only swap the background after the URL proves it loads — no broken visuals.
+    const imageUrl = driveDirectUrl(first.url, "photo");
+
+    img.onload = () => {
+      el.style.backgroundImage =
+        `linear-gradient(150deg,rgba(0,0,0,.06),rgba(0,0,0,.06)),url("${imageUrl}")`;
+      el.style.backgroundSize = "cover";
+      el.style.backgroundPosition = "center";
+    };
+
+    img.onerror = () => {
+      console.error("Gagal memuat foto Media:", first.url);
+    };
+
+    img.src = imageUrl;
+      });
+    }
+
+/** Prefer Media-tab hero slides over portfolio covers when both exist. */
+function heroSlidesFromMedia() {
+  const slides = (mediaBySection[normalizeMediaSection("hero")] || []).filter(m => m.url && m.type === "foto");
+  return slides.map((m, i) => ({
+    title: m.title || `Hero ${i + 1}`,
+    category: "nail-art",
+    media: m.type,
+    cover: driveDirectUrl(m.url, "photo"),
+    alt: m.alt,
+    thumb: m.thumb,
+    order: m.order,
+    url: ""
+  }));
+}
 const FALLBACK_CAPTION_EN = "Illustrative photo — placeholder until the real work is published.";
 const FALLBACK_CAPTION_ID = "Foto ilustrasi — pengganti sementara sebelum karya asli dipublikasikan.";
 
@@ -133,6 +411,51 @@ const I18N = {
     pd1: "Cat eye basic", pd2: "Cat eye glass", pd3: "Cat eye dalam", pd4: "Cat eye french", pd5: "Nail gel french", pd6: "Ombre / blush",
     price_foot: "Same design across 10 fingers, many color choices. Custom designs and accessories available. Lash & brow prices are in a separate brochure — eyelash starts at Rp90.000.",
     price_cta: "Ask / book nail art",
+    review_write: "Write a review",
+    reviews_empty_title: "No reviews yet",
+    reviews_empty_text: "Be the first to share your experience with By.Niadania.",
+    rf_title: "Write a review",
+    rf_name: "Your name",
+    rf_service: "Service you used",
+    rf_rating: "Your rating",
+    rf_text: "Tell us about your experience",
+    rf_photo: "Photo (optional)",
+    rf_video: "Video (optional)",
+    rf_upload_limits_label_photo: "Format JPG, JPEG, PNG, or WebP. Max. 5 MB per photo.",
+    rf_upload_limits_label_video: "Format MP4 or WebM. Max. 10 MB per video.",
+    rf_consent: "I agree to the processing of my review.",
+    rf_rights: "I have the rights or permission to use the photo/video I submit.",
+    rf_note: "Reviews are checked before being shown.",
+    rf_submit: "Send review",
+    rf_submitting: "Sending…",
+    rf_uploading: "Uploading your review…",
+    rf_err_name: "Please enter your name or nickname.",
+    rf_err_service: "Please choose a service.",
+    rf_err_rating: "Please pick a star rating.",
+    rf_err_text: "Please write a short review.",
+    rf_err_consent: "Please confirm publication consent.",
+    rf_err_rights: "Please confirm media rights.",
+    rf_file_too_big: "File is too large (max {max} MB).",
+    rf_file_bad_type: "File type is not supported.",
+    rf_remove_file: "Remove file",
+    rf_success: "Thank you for sharing your story with By.Niadania! We've received your review and it will be checked before it appears on the website.",
+    rf_error: "Something went wrong. Please try again in a moment.",
+    rf_network_error: "Network problem — your review was not sent. Please try again.",
+    rv_media_view: "View media",
+    rv_title: "Share your experience",
+    rv_name: "Name or nickname *",
+    rv_service: "Service you used *",
+    rv_service_ph: "Select a service",
+    rv_text: "Your review *",
+    rv_text_ph: "How was your visit?",
+    rv_rating: "Rating *",
+    rv_photo: "Photo (optional)",
+    rv_video: "Video (optional)",
+    rv_consent: "I agree to the processing of my review.",
+    rv_rights: "I have the rights or permission to use the photo/video I submit.",
+    rv_note: "Reviews are checked before being shown.",
+    rv_submit: "Send review",
+    rv_uploading: "Uploading your review…",
     review_title: "Your words,<br><em>your stories.</em>",
     review_text: "Find customer experiences and the latest work through By.Niadania's Instagram.",
     review_cta: "Explore Instagram",
@@ -240,7 +563,7 @@ const I18N = {
     cart_wa_confirm_note: "Schedule to be confirmed by By.Niadania.",
     cart_form_title: "Your details",
     cart_form_name: "Full name",
-    cart_form_name_ph: "e.g. Sarah", 
+    cart_form_name_ph: "e.g. Nasita", 
     cart_form_date: "Preferred date",
     cart_form_time: "Preferred time",
     cart_form_notes: "Additional notes (optional)",
@@ -329,6 +652,51 @@ const I18N = {
     pd1: "Cat eye biasa", pd2: "Cat eye glass", pd3: "Cat eye dalam", pd4: "Cat eye french", pd5: "Nail gel french", pd6: "Ombre / blush",
     price_foot: "Design sama untuk 10 kuku, banyak pilihan warna. Custom design dan aksesoris tersedia. Harga lash & brow ada di brosur terpisah — eyelash mulai Rp90.000.",
     price_cta: "Tanya / reservasi nail art",
+    review_write: "Tulis Ulasan",
+    reviews_empty_title: "Belum Ada Ulasan",
+    reviews_empty_text: "Jadilah yang pertama berbagi pengalaman bersama By.Niadania.",
+    rf_title: "Tulis Ulasan",
+    rf_name: "Nama Kamu",
+    rf_service: "Layanan yang Kamu Gunakan",
+    rf_rating: "Beri Rating",
+    rf_text: "Ceritakan Pengalaman Kamu",
+    rf_photo: "Foto (Opsional)",
+    rf_video: "Video (Opsional)",
+    rf_upload_limits_label_photo: "Tambahkan foto (JPG, PNG, atau WebP). Ukuran maksimal 5 MB.",
+    rf_upload_limits_label_video: "Tambahkan video (MP4 atau WebM). Ukuran maksimal 10 MB.",
+    rf_consent: "Saya menyetujui pemrosesan ulasan saya.",
+    rf_rights: "Saya memiliki hak atau izin untuk menggunakan foto/video yang dikirim.",
+    rf_note: "Ulasan akan diperiksa sebelum ditampilkan.",
+    rf_submit: "Kirim Ulasan",
+    rf_submitting: "Mengirim…",
+    rf_uploading: "Mengunggah ulasanmu…",
+    rf_err_name: "Mohon isi nama atau nama samaran.",
+    rf_err_service: "Mohon pilih layanan.",
+    rf_err_rating: "Mohon pilih rating bintang.",
+    rf_err_text: "Mohon tulis ulasan singkat.",
+    rf_err_consent: "Mohon centang persetujuan publikasi.",
+    rf_err_rights: "Mohon centang konfirmasi hak media.",
+    rf_file_too_big: "Ukuran file terlalu besar (maks {max} MB).",
+    rf_file_bad_type: "Tipe file tidak didukung.",
+    rf_remove_file: "Hapus file",
+    rf_success: "Terima kasih sudah berbagi cerita dengan By.Niadania! Ulasanmu sudah kami terima dan akan ditinjau sebelum ditampilkan di website.",
+    rf_error: "Terjadi kesalahan. Coba lagi sebentar ya.",
+    rf_network_error: "Masalah jaringan — ulasan belum terkirim. Coba lagi ya.",
+    rv_media_view: "Lihat media",
+    rv_title: "Bagikan pengalamanmu",
+    rv_name: "Nama atau nama samaran *",
+    rv_service: "Layanan yang kamu pakai *",
+    rv_service_ph: "Pilih layanan",
+    rv_text: "Ulasan kamu *",
+    rv_text_ph: "Bagaimana kunjungan kamu?",
+    rv_rating: "Rating *",
+    rv_photo: "Foto (opsional)",
+    rv_video: "Video (opsional)",
+    rv_consent: "Saya setuju teks dan media ulasan saya dipublikasikan di website ini setelah ditinjau.",
+    rv_rights: "Saya menyatakan berhak membagikan media yang dilampirkan.",
+    rv_note: "Ulasan diperiksa dulu sebelum ditampilkan.",
+    rv_submit: "Kirim ulasan",
+    rv_uploading: "Mengunggah ulasanmu…",
     review_title: "Kata-katamu,<br><em>ceritamu.</em>",
     review_text: "Temukan pengalaman pelanggan dan karya terbaru melalui Instagram By.Niadania.",
     review_cta: "Buka Instagram",
@@ -403,7 +771,7 @@ const I18N = {
     toast_social: "Segera hadir — link resmi akan ditambahkan di sini.",
     lightbox_close: "Tutup gambar",
     coming_soon: "Segera hadir",
-    add_to_cart: "Tambah ke Keranjang",
+    add_to_cart: "Tambahkan",
     cart_view: "Lihat Keranjang",
     cart_title: "Keranjang layananmu",
     cart_empty: "Keranjang masih kosong. Pilih layanan dari daftar harga di atas ya.",
@@ -436,7 +804,7 @@ const I18N = {
     cart_wa_confirm_note: "Jadwal masih perlu dikonfirmasi oleh By.Niadania.",
     cart_form_title: "Data kamu",
     cart_form_name: "Nama lengkap",
-    cart_form_name_ph: "mis. Sarah",
+    cart_form_name_ph: "mis. Nasita",
     cart_form_date: "Tanggal yang diinginkan",
     cart_form_time: "Jam yang diinginkan",
     cart_form_notes: "Catatan tambahan (opsional)",
@@ -655,6 +1023,9 @@ const heroState = { slides: [], index: 0, timer: null, dragging: false, startX: 
 const heroCarousel = document.querySelector("#heroCarousel");
 
 function heroSlidesFromPortfolio() {
+  // Prefer explicit hero slides from the Media tab when the owner configured them.
+  const mediaSlides = heroSlidesFromMedia();
+  if (mediaSlides.length) return mediaSlides.slice(0, 5);
   // Featured first; fall back to any published item. Every slide always has a
   // real photo: the sheet cover when present, otherwise a local category photo.
   const items = portfolioState.items;
@@ -793,11 +1164,15 @@ document.querySelectorAll(".filter").forEach(button => {
     const CATEGORY_ALIASES = {
     "nail art": "nail-art",
     "nailart": "nail-art",
+    "nail-art": "nail-art",
     "eyelash": "eyelash",
     "lash": "eyelash",
+    "eyelashes": "eyelash",
     "brow": "brow",
     "eyebrow": "brow",
-    "makeup": "makeup"
+    "brows": "brow",
+    "makeup": "makeup",
+    "make up": "makeup"
     };
 
     function normalizeCategory(raw) {
@@ -808,7 +1183,7 @@ document.querySelectorAll(".filter").forEach(button => {
     function isValidInstagramUrl(url) {
     try {
     const u = new URL(url);
-    return u.hostname.endsWith("instagram.com") && /^\/p\/[\w-]+\/?$/.test(u.pathname);
+    return u.hostname.endsWith("instagram.com") && /^\/(p|reel)\/[\w-]+\/?$/.test(u.pathname);
     } catch (e) { return false; }
     }
 
@@ -847,7 +1222,7 @@ document.querySelectorAll(".filter").forEach(button => {
             category: normalizeCategory(row.kategori),
             media: String(row.tipe_media || "Foto").trim().toLowerCase() === "video" ? "video" : "foto",
             url: row.instagram_url,
-            cover: row.cover_url && /^https?:\/\//.test(String(row.cover_url).trim()) ? row.cover_url.trim() : "",
+            cover: driveDirectUrl(row.cover_url, "photo"),
             description: row.deskripsi || "",
             featured: String(row.unggulan || "").trim().toUpperCase() === "TRUE",
             order: Number(row.urutan) || 0
@@ -859,6 +1234,9 @@ document.querySelectorAll(".filter").forEach(button => {
     window.__portfolioNoticeKey = null;
     renderPortfolio();
     renderFeaturedWorks();
+    await loadMedia();           // centralized hero / service / studio media
+    applyMediaServicePhotos();
+    applyMediaStudioVideo();
     buildHeroCarousel();
     } catch (err) {
     portfolioState.failed = true;
@@ -1168,8 +1546,23 @@ document.querySelectorAll(".social-btn").forEach(button => {
 });
 
 // ---------------- PortoWeb credit (WhatsApp text link + Instagram icon) ----------------
-// The credit line is now a real WhatsApp text link, so the coming-soon handler is no longer needed.
-document.querySelectorAll(".footer-credit [data-i18n]").forEach(el => el.remove());
+// Separate WhatsApp lane: this is PortoWeb ID's OWN number for website-service
+// inquiries — never the By.Niadania business number used for reservations.
+(function initPortowebLink() {
+  const link = document.querySelector("#portowebLink");
+  if (!link) return;
+  const apply = () => {
+    const msg = state.lang === "id"
+      ? "Halo, saya tertarik dengan jasa pembuatan website PortoWeb ID. Boleh minta informasi mengenai layanan dan harganya?"
+      : "Hello, I'm interested in PortoWeb ID's website development services. Could you share more information about your services and pricing?";
+    const href = `https://wa.me/${PORTOWEB_SOCIALS.whatsapp}?text=${encodeURIComponent(msg)}`;
+    link.href = href;
+    const icon = document.querySelector("#portowebWa");
+    if (icon) icon.href = href; // same PortoWeb lane, same message
+  };
+  apply();
+  document.querySelectorAll(".lang-btn").forEach(btn => btn.addEventListener("click", () => setTimeout(apply, 60)));
+})();
 
 // ---------------- Footer year ----------------
 const yearEl = document.querySelector("#year");
@@ -1214,6 +1607,14 @@ function featuredCard(item) {
 }
 
 window.loadPortfolioRef = loadPortfolio;
+// Public refresh hook (owner/consoles can run `window.refreshMedia()` after
+// changing URLs in the Sheet — bypasses the 5-minute cache).
+window.refreshMedia = async () => {
+  await loadMedia({ force: true });
+  applyMediaServicePhotos();
+  applyMediaStudioVideo();
+  buildHeroCarousel();
+};
 loadPortfolio();
 
 // ================= Price list API (Google Sheets via Apps Script) =================

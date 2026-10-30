@@ -181,7 +181,10 @@
         </div>
       </div>
       <div class="reviews-gallery reveal">
-        <div class="reviews-grid" id="reviewsGrid"></div>
+        <div class="review-filter-row" id="reviewFilters" role="group" aria-label="Filter reviews"></div>
+        <div class="reviews-scroll" id="reviewsScroll">
+          <div class="reviews-grid" id="reviewsGrid"></div>
+        </div>
         <div class="reviews-empty" id="reviewsEmpty" hidden>
           <p data-i18n="reviews_empty_title">No published reviews yet.</p>
           <p class="small-note" data-i18n="reviews_empty_text">Be the first to share your story — your review will appear here once it's been approved.</p>
@@ -219,13 +222,15 @@
             <em class="rv-err" data-err-for="rvText" hidden></em>
           </label>
           <label>
-            <span data-i18n="rf_photo">Photo (optional — JPEG, PNG, WebP, max 5 MB)</span>
+            <span data-i18n="rf_photo">Photo (optional)</span>
+            <em class="rv-limits" data-i18n="rf_upload_limits_label_photo">JPG, JPEG, PNG, or WebP · Max. 5 MB per photo.</em>
             <input type="file" id="rvPhoto" accept="image/jpeg,image/png,image/webp">
             <span class="rv-file-info" id="rvPhotoInfo"></span>
             <span class="rv-preview" id="rvPhotoPreview" hidden></span>
           </label>
           <label>
-            <span data-i18n="rf_video">Video (optional — MP4, WebM, max 40 MB)</span>
+            <span data-i18n="rf_video">Video (optional)</span>
+            <em class="rv-limits" data-i18n="rf_upload_limits_label_video">MP4, WebM · Max. 10 MB per video.</em>
             <input type="file" id="rvVideo" accept="video/mp4,video/webm">
             <span class="rv-file-info" id="rvVideoInfo"></span>
             <span class="rv-preview" id="rvVideoPreview" hidden></span>
@@ -402,34 +407,25 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="reviews.js"></script>
   <script src="script.js"></script>
-</body>
-</html>
+  <!--
+    Semua harga di halaman ini ditranskripsikan dari pricelist resmi By.Niadania
+    dan sudah dicocokkan 1:1 dengan data di tab "Menu" pada Google Sheets
+    (dibaca lewat Apps Script endpoint ?action=prices).
 
+    Status audit per 2026-10-28:
+    - 27 item di tab Menu: 7 layanan dasar + 8 paket + 12 pilihan design.
+    - Semua item Nail Art. Belum ada item Eyelash / Brow / Makeup di Sheet,
+      jadi kategori tersebut tidak ditampilkan di daftar harga (bukan disamarkan).
+    - Semua item berstatus "DRAFT - KONFIRMASI" / "PERLU VERIFIKASI VARIAN"
+      sesuai kolom status_data di Sheet.
+    - Jika pemilik memperbarui harga di tab Menu, tampilan website harus
+      mengikuti data Sheet (single source of truth).
 
-<!--
-  Semua harga di halaman ini ditranskripsikan dari pricelist resmi By.Niadania
-  dan sudah dicocokkan 1:1 dengan data di tab "Menu" pada Google Sheets
-  (dibaca lewat Apps Script endpoint ?action=prices).
-
-  Status audit per 2026-10-28:
-  - 27 item di tab Menu: 7 layanan dasar + 8 paket + 12 pilihan design.
-  - Semua item Nail Art. Belum ada item Eyelash / Brow / Makeup di Sheet,
-    jadi kategori tersebut tidak ditampilkan di daftar harga (bukan disamarkan).
-  - Semua item berstatus "DRAFT - KONFIRMASI" / "PERLU VERIFIKASI VARIAN"
-    sesuai kolom status_data di Sheet.
-  - Jika pemilik memperbarui harga di tab Menu, tampilan website harus
-    mengikuti data Sheet (single source of truth).
--->
-
-<!-- STATUS DATA AUDIT NOTE (do not delete) -->
-<!--
-<!--
-  Status audit per 2026-10-28 (kolom status_data di tab Menu):
-  - PK001-PK008 (paket): DRAFT - KONFIRMASI
-  - DS001-DS012 (design): DRAFT - KONFIRMASI
-    kecuali DS005/DS006 (Cat Eye Dalam): PERLU VERIFIKASI VARIAN
-  - Semua item kategori Nail Art. Tidak ada item Eyelash/Brow/Makeup di Sheet.
-  - Website harus single source of truth: tampilan mengikuti tab Menu.
--->
+    PK001-PK008 (paket): DRAFT - KONFIRMASI
+    DS001-DS012 (design): DRAFT - KONFIRMASI
+      kecuali DS005/DS006 (Cat Eye Dalam): PERLU VERIFIKASI VARIAN
+    Semua item kategori Nail Art. Tidak ada item Eyelash/Brow/Makeup di Sheet.
+    Website harus single source of truth: tampilan mengikuti tab Menu.
+  -->
 </body>
 </html>

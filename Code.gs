@@ -1,77 +1,63 @@
+
 /**
- * By.Niadania public API (read-only)
- * Tabs: "Menu" (price list) and "Portfolio" (karya).
- * Upload workbook to Google Sheets, then set SPREADSHEET_ID.
- * Deploy as Web App only if this data is intended to be public.
- * All prices and portfolio items must be confirmed by the owner before production.
- *
- * Endpoints:
- *   ?action=prices               (default when no action)  -> price list from "Menu"
- *   ?action=portfolio            -> portfolio items from "Portfolio" (status_data=PUBLISHED only)
- *   ?category=...                -> optional filter for either endpoint
- * Backward compatible: requests without an action parameter still return the price list.
+ * By.Niadania API
+ * Mendukung daftar harga (Menu) dan portfolio.
+ * Menu tetap menjadi aksi default untuk kompatibilitas API lama.
  */
-const SPREADSHEET_ID = 'PASTE_GOOGLE_SHEET_ID_HERE';
-const SHEET_NAME = 'Menu';
-const PORTFOLIO_SHEET_NAME = 'Portfolio';
+const SPREADSHEET_ID = '1liQcy4CyAS3_Gjq0sdMRoXTUJT7Px0uo1jBdmwaypcM';
+// Folder Drive penyimpanan foto/video ulasan (disediakan pemilik).
+const REVIEW_MEDIA_FOLDER_ID = '1uBRXMfSKq1tRQ8Zmm0x4jN97kZCHUz7z';
+const REVIEW_SHEET = 'Reviews';
+const ALLOWED_MEDIA = {
+  photo: { mimes: ['image/jpeg', 'image/png', 'image/webp'], exts: ['jpg', 'jpeg', 'png', 'webp'], maxBytes: 5 * 1024 * 1024, field: 'photo' },
+  video: { mimes: ['video/mp4', 'video/webm'], exts: ['mp4', 'webm'], maxBytes: 40 * 1024 * 1024, field: 'video' }
+};
 
 function doGet(e) {
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const action = e && e.parameter && e.parameter.action
-      ? String(e.parameter.action).trim().toLowerCase() : '';
+    const action = String(e?.parameter?.action || 'menu')
+      .trim()
+      .toLowerCase();
 
     if (action === 'portfolio') {
-      return json_(readSheet_(ss, PORTFOLIO_SHEET_NAME, e, filterPublished_));
+      return json_(getPortfolio_(ss, e));
     }
+
+    if (action === 'media') {
+      return json_(getMedia_(ss));
+    }
+
     if (action === 'reviews') {
-      return json_(doGetReviews_(e));
+      return json_(getReviews_(ss));
     }
-    // Default: existing price-list behavior (unchanged contract)
-    return json_(readSheet_(ss, SHEET_NAME, e));
+
+    if (action === 'menu') {
+      return json_(getMenu_(ss, e));
+    }
+
+    return json_({
+      success: false,
+      error: 'Action tidak dikenal. Gunakan action=menu, action=portfolio, action=media, atau action=reviews.',
+      data: []
+    });
   } catch (err) {
-    return json_({ success: false, error: String(err.message || err), data: [] });
+    return json_({
+      success: false,
+      error: String(err.message || err),
+      data: []
+    });
   }
 }
 
-/** POST handler: multipart/form-data from reviews.js (action=submitReview). */
-function doPost(e) {
-  try {
-    const params = (e && e.parameter) || {};
-    const action = String(params.action || '').trim().toLowerCase();
-    if (action !== 'submitreview') return json_({ success: false, message: 'Unknown action' });
-    const payload = {
-      display_name: params.display_name,
-      service_name: params.service_name,
-      rating: params.rating,
-      review_text: params.review_text,
-      lang: params.lang
-    };
-    // mediaFile name is a parameter; actual blob comes from e.parameters.<name>
-    const mediaParam = String(params.mediaFile || '').trim();
-    if (mediaParam && e.parameters && e.parameters[mediaParam]) {
-      payload.media = e.parameters[mediaParam][0];
-    }
-    if (payload.media) {
-      payload.media.bytes = Utilities.base64Decode(params.mediaData);
-    }
-    const res = submitReview_(payload);
-    return json_(res);
-  } catch (err) {
-    return json_({ success: false, message: 'Server error' });
-  }
-}
-
-/**
- * Reads a sheet by name, maps rows by header, applies optional category filter,
- * and applies an optional row-level validator (e.g. portfolio publish status).
- */
-function readSheet_(ss, sheetName, e, rowValidator) {
-  const sheet = ss.getSheetByName(sheetName);
-  if (!sheet) throw new Error('Tab "' + sheetName + '" tidak ditemukan.');
+function getMenu_(ss, e) {
+  const sheet = ss.getSheetByName('Menu');
+  if (!sheet) throw new Error('Tab "Menu" tidak ditemukan.');
 
   const values = sheet.getDataRange().getDisplayValues();
-  if (values.length < 2) return { success: true, count: 0, data: [] };
+  if (values.length < 2) {
+    return { success: true, count: 0, data: [] };
+  }
 
   const headers = values[0].map(h => String(h).trim());
   let data = values.slice(1)
@@ -82,199 +68,297 @@ function readSheet_(ss, sheetName, e, rowValidator) {
       return obj;
     });
 
-  if (rowValidator) data = data.filter(rowValidator);
+  const category = String(e?.parameter?.category || '')
+    .trim()
+    .toLowerCase();
 
-  const category = e && e.parameter && e.parameter.category
-    ? String(e.parameter.category).trim().toLowerCase() : '';
   if (category) {
-    data = data.filter(item => String(item.kategori || '').trim().toLowerCase() === category);
+    data = data.filter(item =>
+      String(item.kategori || '').trim().toLowerCase() === category
+    );
   }
 
-  return { success: true, count: data.length, data: data };
+  return { success: true, count: data.length, data };
 }
 
-/**
- * Portfolio rows: only PUBLISHED items go to the public site.
- * DRAFT, empty, or any other status value stays hidden.
- */
-function filterPublished_(row) {
-  const status = String(row.status_data || '').trim().toLowerCase();
-  if (status !== 'published') return false;
-  // Required fields for a usable portfolio item
-  if (!row.id || !row.judul || !row.instagram_url) return false;
-  return true;
-}
+function getPortfolio_(ss, e) {
+  const sheet = ss.getSheetByName('Portfolio');
+  if (!sheet) throw new Error('Tab "Portfolio" tidak ditemukan.');
 
-/**
- * Test helper: checks the Portfolio tab exists and shows the parsed data.
- * Run from the Apps Script editor, not the deployed web app.
- */
-function testReadPortfolio() {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  Logger.log(readSheet_(ss, PORTFOLIO_SHEET_NAME, null, filterPublished_));
+  const values = sheet.getDataRange().getDisplayValues();
+  if (values.length < 2) {
+    return { success: true, count: 0, data: [] };
+  }
+
+  const headers = values[0].map(h => String(h).trim());
+  const required = [
+    'id', 'kategori', 'judul', 'tipe_media', 'instagram_url',
+    'cover_url', 'deskripsi', 'unggulan', 'status_data', 'urutan'
+  ];
+
+  const missing = required.filter(header => !headers.includes(header));
+  if (missing.length) {
+    throw new Error('Kolom Portfolio tidak ditemukan: ' + missing.join(', '));
+  }
+
+  let data = values.slice(1)
+    .filter(row => row.some(cell => String(cell).trim() !== ''))
+    .map(row => {
+      const obj = {};
+      headers.forEach((header, i) => obj[header] = row[i] || '');
+      return obj;
+    })
+    .filter(item =>
+      String(item.status_data || '').trim().toUpperCase() === 'PUBLISHED'
+    );
+
+  const category = String(e?.parameter?.category || '')
+    .trim()
+    .toLowerCase();
+
+  if (category && category !== 'all' && category !== 'semua') {
+    data = data.filter(item =>
+      String(item.kategori || '').trim().toLowerCase() === category
+    );
+  }
+
+  data.sort((a, b) => {
+    const orderA = Number(a.urutan) || 9999;
+    const orderB = Number(b.urutan) || 9999;
+    return orderA - orderB;
+  });
+
+  return { success: true, count: data.length, data };
 }
 
 function json_(payload) {
-  return ContentService.createTextOutput(JSON.stringify(payload))
+  return ContentService
+    .createTextOutput(JSON.stringify(payload))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function testReadMenu() {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  Logger.log(readSheet_(ss, SHEET_NAME, null));
-}
-
-/* ================= Customer reviews (PENDING -> PUBLISHED) =================
- * New tab "Reviews" (created lazily). One row per review; media stored as
- * pipe-separated Drive file IDs per review. Public endpoint returns only
- * PUBLISHED rows. Owner moderates by editing the status column in the Sheet.
- * Frontend review form posts here as multipart/form-data (see reviews.js).
- *
- * Deployment: after editing this file, create a NEW deployment (or redeploy)
- * so the live web app picks the changes up.
- */
-const REVIEWS_SHEET_NAME = 'Reviews';
-const REVIEWS_FOLDER_NAME = 'By.Niadania Reviews';
-const REVIEW_PHOTO_MAX_MB = 5;
-const REVIEW_VIDEO_MAX_MB = 40;
-const REVIEW_MEDIA_MAX_FILES = 3;
-const REVIEW_TEXT_MAX_LEN = 1000;
-
-// Ensure the Reviews tab exists with the canonical header order.
-function ensureReviewsSheet_(ss) {
-  let sheet = ss.getSheetByName(REVIEWS_SHEET_NAME);
-  if (!sheet) {
-    sheet = ss.insertSheet(REVIEWS_SHEET_NAME);
-    sheet.appendRow(['review_id', 'created_at', 'display_name', 'service_id', 'service_name',
-      'rating', 'review_text', 'media_ids', 'media_types', 'media_urls',
-      'status', 'moderated_at', 'moderator_note']);
-  }
-  return sheet;
-}
-
-function reviewsFolder_(ss) {
-  const it = DriveApp.getFoldersByName(REVIEWS_FOLDER_NAME);
-  return it.hasNext() ? it.next() : DriveApp.createFolder(REVIEWS_FOLDER_NAME);
-}
-
-function newReviewId_() {
-  return 'rv_' + Utilities.getUuid().replace(/-/g, '').slice(0, 20);
-}
-
-function validReviewRating_(value) {
-  const n = Number(value);
-  return Number.isInteger(n) && n >= 1 && n <= 5 ? n : null;
-}
-
-function uploadReviewMedia_(file) {
-  const folder = reviewsFolder_();
-  const blob = file.getAs(file.getName().toLowerCase().endsWith('.webm') ? 'video/webm' : file.getContentType() || 'application/octet-stream');
-  const created = folder.createFile(blob.setName('rv_' + Date.now() + '_' + file.getName()));
-  try { created.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) { /* permissions locked by domain */ }
-  return { id: created.getId(), type: blob.getContentType().startsWith('video/') ? 'video' : 'photo', name: file.getName() };
-}
-
-function doGetReviews_(e) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ensureReviewsSheet_(ss);
+// ================= Reviews: public read + submit + media upload =================
+// doGet action=reviews -> hanya status PUBLISHED.
+// POST action=submitReview (multipart/form-data) -> status PENDING + upload Drive.
+function getReviews_(ss) {
+  const sheet = ss.getSheetByName(REVIEW_SHEET);
+  if (!sheet) throw new Error('Tab "Reviews" tidak ditemukan.');
   const values = sheet.getDataRange().getDisplayValues();
   if (values.length < 2) return { success: true, count: 0, data: [] };
   const headers = values[0].map(h => String(h).trim());
   const data = values.slice(1)
     .filter(row => row.some(c => String(c).trim() !== ''))
     .map(row => {
-      const o = {};
-      headers.forEach((h, i) => o[h] = row[i] || '');
-      return o;
+      const obj = {};
+      headers.forEach((h, i) => obj[h] = String(row[i] || '').trim());
+      return obj;
     })
-    .filter(r => String(r.status || '').trim().toLowerCase() === 'published')
+    .filter(r => String(r.status || '').trim().toUpperCase() === 'PUBLISHED')
     .map(r => ({
       review_id: r.review_id,
+      created_at: r.created_at,
       display_name: r.display_name,
+      service_id: r.service_id,
       service_name: r.service_name,
       rating: Number(r.rating) || 0,
       review_text: r.review_text,
-      created_at_display: r.created_at,
-      media_urls: String(r.media_urls || '').split('|').filter(Boolean),
-      media_types: String(r.media_types || '').split('|').filter(Boolean)
-    }));
-  return { success: true, count: data.length, data: data };
+      media_ids: r.media_ids,
+      media_types: r.media_types,
+      media_urls: r.media_urls
+    }))
+    .filter(r => r.rating >= 1 && r.rating <= 5);
+  return { success: true, count: data.length, data };
 }
 
-/** Submits a customer review. Always stores as PENDING. */
-function submitReview_(payload) {
+function doGetReviews(e) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  return json_(getReviews_(ss));
+}
+
+function slug_(s) {
+  return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'file';
+}
+
+/** Simpan satu blob ke folder Drive. Mengembalikan {id, url, type}.
+ *  Tidak mengubah izin file otomatis — dokumentasikan bahwa folder harus
+ *  dibagikan "Anyone with the link" bila media mau tampil di website. */
+function saveMedia_(folder, blob, kind) {
+  const rule = ALLOWED_MEDIA[kind];
+  const mime = blob.getContentType() || '';
+  const name = String(blob.getName() || '');
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  const mimeOk = rule.mimes.indexOf(mime) !== -1;
+  const extOk = rule.exts.indexOf(ext) !== -1;
+  if (!mimeOk && !extOk) throw new Error('Tipe file tidak didukung: ' + name);
+  if (mimeOk && !extOk) throw new Error('Ekstensi file tidak cocok: ' + name);
+  if (blob.getBytes().length > rule.maxBytes) {
+    throw new Error('Ukuran file melebihi ' + Math.round(rule.maxBytes / 1024 / 1024) + ' MB: ' + name);
+  }
+  const unique = Utilities.getUuid().slice(0, 8);
+  const finalName = 'review-' + slug_(name.replace(/\.[^.]+$/, '')) + '-' + unique + '.' + ext;
+  const file = folder.createFile(blob.setName(finalName));
+  if (!file || !file.getId()) throw new Error('Gagal menyimpan file ke Drive: ' + finalName);
+  return {
+    id: file.getId(),
+    type: kind === 'video' ? 'video' : 'photo',
+    url: 'https://drive.google.com/uc?export=view&id=' + file.getId()
+  };
+}
+
+function doPost(e) {
+  const uploaded = []; // track untuk pembersihan bila penyimpanan review gagal
   const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
   try {
+    lock.waitLock(30000);
+    const action = String(e && e.parameter && e.parameter.action || '').trim();
+    if (action !== 'submitReview') {
+      return json_({ success: false, message: 'Action tidak dikenal.', data: [] });
+    }
+    if (!e || !e.postData && !e.parameters) {
+      return json_({ success: false, message: 'Payload tidak valid.', data: [] });
+    }
+    const p = e.parameter || {};
+    const displayName = String(p.display_name || '').trim();
+    const serviceName = String(p.service_name || '').trim();
+    const rating = Number(p.rating || 0);
+    const reviewText = String(p.review_text || '').trim();
+    const lang = String(p.lang || 'id').trim();
+
+    // Validasi server-side — frontend validation bukan pengganti.
+    if (!displayName || displayName.length > 60) return json_({ success: false, message: 'Nama tidak valid.', data: [] });
+    if (!serviceName) return json_({ success: false, message: 'Layanan wajib dipilih.', data: [] });
+    if (!(rating >= 1 && rating <= 5)) return json_({ success: false, message: 'Rating harus 1-5.', data: [] });
+    if (!reviewText || reviewText.length > 1000) return json_({ success: false, message: 'Ulasan tidak valid.', data: [] });
+
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const sheet = ensureReviewsSheet_(ss);
-    const name = String(payload.display_name || '').trim();
-    const serviceName = String(payload.service_name || '').trim();
-    const text = String(payload.review_text || '').trim();
-    const rating = validReviewRating_(payload.rating);
-    if (!name || name.length > 60) return { success: false, message: 'Invalid name' };
-    if (!serviceName || serviceName.length > 80) return { success: false, message: 'Invalid service' };
-    if (!rating) return { success: false, message: 'Invalid rating' };
-    if (!text || text.length > REVIEW_TEXT_MAX_LEN) return { success: false, message: 'Invalid review text' };
-    if (!payload.photo && !payload.video && !payload.media) return { success: false, message: 'Missing media' };
+    const sheet = ss.getSheetByName(REVIEW_SHEET);
+    if (!sheet) throw new Error('Tab "Reviews" tidak ditemukan.');
+    const folder = DriveApp.getFolderById(REVIEW_MEDIA_FOLDER_ID);
 
-    const media = [];
-    const saveMedia = (blob, mime) => {
-      const folder = reviewsFolder_();
-      const created = folder.createFile(blob.setName('rv_' + Date.now() + '_' + (blob.getName() || 'media')));
-      try { created.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) { /* domain-locked */ }
-      return { id: created.getId(), type: mime.indexOf('video') === 0 ? 'video' : 'photo' };
-    };
-    if (payload.photo) {
-      if (!/^image\/(jpeg|png|webp)$/.test(payload.photo.type || '')) return { success: false, message: 'Unsupported photo type' };
-      if (payload.photo.bytes.length > REVIEW_PHOTO_MAX_MB * 1024 * 1024) return { success: false, message: 'Photo too large' };
-      media.push(saveMedia(payload.photo, payload.photo.type));
-    }
-    if (payload.video) {
-      if (!/^video\/(mp4|webm)$/.test(payload.video.type || '')) return { success: false, message: 'Unsupported video type' };
-      if (payload.video.bytes.length > REVIEW_VIDEO_MAX_MB * 1024 * 1024) return { success: false, message: 'Video too large' };
-      media.push(saveMedia(payload.video, payload.video.type));
-    }
+    const mediaIds = [], mediaTypes = [], mediaUrls = [];
+    ['photo', 'video'].forEach(kind => {
+      const field = ALLOWED_MEDIA[kind].field;
+      // multipart form-data: file muncul di e.parameters[field] sebagai nama,
+      // blob asli ada di e.parameters[field] hanya untuk beberapa host; cara
+      // paling andal di Apps Script adalah membaca dari e.parameters sebagai
+      // Blob untuk input tunggal:
+      const blob = e.parameters && e.parameters[field];
+      if (!blob || typeof blob !== 'object' || typeof blob.getBytes !== 'function') return;
+      const meta = saveMedia_(folder, blob, kind);
+      uploaded.push(meta);
+      mediaIds.push(meta.id);
+      mediaTypes.push(meta.type);
+      mediaUrls.push(meta.url);
+    });
 
-    const reviewId = newReviewId_();
-    const now = new Date();
+    const reviewId = Utilities.getUuid();
+    const now = Utilities.formatDate(new Date(), 'Asia/Jakarta', 'yyyy-MM-dd HH:mm:ss');
     sheet.appendRow([
       reviewId,
-      Utilities.formatDate(now, Session.getScriptTimeZone(), 'd MMM yyyy'),
-      name, '', serviceName, String(rating),
-      text,
-      media.map(m => m.id).join('|'),
-      media.map(m => m.type).join('|'),
-      media.map(m => 'https://drive.google.com/uc?export=view&id=' + m.id).join('|'),
-      'PENDING', '', ''
+      now,
+      displayName,
+      '',                       // service_id: belum dipetakan dari tab Menu (dibedakan dari data palsu)
+      serviceName,
+      rating,
+      reviewText,
+      mediaIds.join('|'),
+      mediaTypes.join('|'),
+      mediaUrls.join('|'),
+      'PENDING',                // moderasi manual oleh pemilik di sheet
+      '',
+      ''
     ]);
-    return { success: true, review_id: reviewId };
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-/** Public endpoint for the published reviews gallery. */
-function getPublishedReviews() {
-  try {
-    return ContentService.createTextOutput(JSON.stringify(doGetReviews_()))
-      .setMimeType(ContentService.MimeType.JSON);
+    return json_({ success: true, message: 'Review tersimpan, menunggu persetujuan.', data: [{ review_id: reviewId }] });
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Server error', data: [] }))
-      .setMimeType(ContentService.MimeType.JSON);
+    // Jangan sisakan file yatim: hapus file yang sudah terupload bila review gagal disimpan.
+    uploaded.forEach(m => {
+      try { DriveApp.getFileById(m.id).setTrashed(true); } catch (e2) {}
+    });
+    return json_({ success: false, message: String(err.message || err), data: [] });
+  } finally {
+    try { lock.releaseLock(); } catch (e3) {}
   }
 }
 
-/** Test helper: submit a fake review, then check the tab. */
-function testSubmitReview() {
+// Jalankan manual dari editor untuk memeriksa tab Menu.
+function testReadMenu() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  ensureReviewsSheet_(ss);
-  const res = submitReview_({
-    display_name: 'QA Test',
-    service_name: 'Nail Art',
-    rating: 5,
-    review_text: 'Automated QA review - safe to delete.',
-    lang: 'en'
-  });
-  Logger.log(res);
+  const sheet = ss.getSheetByName('Menu');
+  if (!sheet) throw new Error('Tab "Menu" tidak ditemukan.');
+  Logger.log(sheet.getDataRange().getDisplayValues());
+}
+
+// Jalankan manual dari editor untuk memeriksa data Portfolio terpublikasi.
+function testReadPortfolio() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const result = getPortfolio_(ss, {});
+  Logger.log(JSON.stringify(result, null, 2));
+}
+
+
+function getMedia_(ss) {
+  const sheet = ss.getSheetByName('Media');
+
+  if (!sheet) {
+    throw new Error('Tab "Media" tidak ditemukan.');
+  }
+
+  const values = sheet.getDataRange().getDisplayValues();
+
+  if (values.length < 2) {
+    return { success: true, count: 0, data: [] };
+  }
+
+  const headers = values[0].map(h => String(h).trim());
+
+  // Wajib hanya kolom inti. Kolom status mendukung DUA skema:
+  //  - lama : media_id, ..., status (PUBLISHED)
+  //  - baru : id, ..., alt_text, aktif (TRUE/ya/1)
+  // Dua-duanya diterima selama tidak merusak integrasi existing.
+  const required = ['media_url', 'tipe_media', 'section'];
+
+  const missing = required.filter(h => !headers.includes(h));
+
+  if (missing.length) {
+    throw new Error(
+      'Kolom Media tidak ditemukan: ' + missing.join(', ')
+    );
+  }
+
+  const isPublished = (item) => {
+    if (headers.includes('status')) {
+      return String(item.status || '').trim().toUpperCase() === 'PUBLISHED';
+    }
+    if (headers.includes('aktif')) {
+      const v = String(item.aktif || '').trim().toLowerCase();
+      return v === 'true' || v === 'ya' || v === '1' || v === 'yes';
+    }
+    // Tanpa kolom status apa pun -> anggap aktif agar sheet kosong tidak mengunci situs.
+    return true;
+  };
+
+  const data = values.slice(1)
+    .filter(row => row.some(cell => String(cell).trim() !== ''))
+    .map(row => {
+      const obj = {};
+      headers.forEach((header, i) => {
+        obj[header] = String(row[i] || '').trim();
+      });
+      return obj;
+    })
+    .filter(item =>
+      // Baris kosong / tanpa URL media selalu diabaikan.
+      /^https?:\/\//i.test(item.media_url || '') &&
+      isPublished(item)
+    )
+    .sort((a, b) =>
+      (Number(a.urutan) || 9999) -
+      (Number(b.urutan) || 9999)
+    );
+
+  return {
+    success: true,
+    count: data.length,
+    data: data
+  };
 }
